@@ -26,20 +26,33 @@ loopback=`losetup -f --show -o $partstart $img`
 #Make pi expand rootfs on next boot
 mountdir=`mktemp -d`
 mount $loopback $mountdir
-mv $mountdir/etc/rc.local $mountdir/etc/rc.expand.tmp
+
+if [ `md5sum $mountdir/etc/rc.local | cut -d ' ' -f 1` != "a27a4d8192ea6ba713d2ddd15a55b1df" ]; then
+echo Creating new /etc/rc.local
+mv $mountdir/etc/rc.local $mountdir/etc/rc.local.bak
 cat <<\EOF > $mountdir/etc/rc.local
-#!/bin/sh
-/usr/bin/raspi-config --expand-rootfs; mv -f /etc/rc.expand.tmp /etc/rc.local; reboot
+#!/bin/bash
+/usr/bin/raspi-config --expand-rootfs
+rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; reboot
 exit 0
 EOF
 chmod +x $mountdir/etc/rc.local
-umount $loopback
+fi
+umount $mountdir
 
 #Shrink filesystem
 e2fsck -f $loopback
 minsize=`resize2fs -P $loopback | awk -F': ' ' { print $2 } '`
 minsize=`echo $minsize+20000 | bc`
 resize2fs -p $loopback $minsize
+if [[ $? != 0 ]]; then
+  echo ERROR: resize2fs failed...
+  mount $loopback $mountdir
+  mv $mountdir/etc/rc.local.bak $mountdir/etc/rc.local
+  umount $mountdir
+  losetup -d $loopback
+  exit $rc
+fi
 sleep 1
 
 #Shrink partition
