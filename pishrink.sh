@@ -16,6 +16,18 @@ if (( EUID != 0 )); then
    exit -3
 fi
 
+#Check that what we need is installed
+A=`which parted 2>&1`
+if (( $? != 0 )); then
+   echo "ERROR: parted is not installed."
+   exit -4
+fi
+A=`which bc 2>&1`
+if (( $? != 0 )); then
+   echo "ERROR: bc is not installed."
+   exit -5
+fi
+
 #Gather info
 beforesize=`ls -lah $img | cut -d ' ' -f 5`
 partinfo=`parted -m $img unit B print`
