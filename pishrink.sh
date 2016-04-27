@@ -22,11 +22,6 @@ if (( $? != 0 )); then
    echo "ERROR: parted is not installed."
    exit -4
 fi
-A=`which bc 2>&1`
-if (( $? != 0 )); then
-   echo "ERROR: bc is not installed."
-   exit -5
-fi
 
 #Gather info
 beforesize=`ls -lah $img | cut -d ' ' -f 5`
@@ -53,7 +48,7 @@ umount $mountdir
 #Shrink filesystem
 e2fsck -f $loopback
 minsize=`resize2fs -P $loopback | cut -d ':' -f 2 | tr -d ' '`
-minsize=`echo $minsize+20000 | bc`
+minsize=`expr $minsize + 20000 | tr -d '\n'`
 resize2fs -p $loopback $minsize
 if [[ $? != 0 ]]; then
   echo ERROR: resize2fs failed...
@@ -67,8 +62,8 @@ sleep 1
 
 #Shrink partition
 losetup -d $loopback
-partnewsize=`echo "$minsize * 4096" | bc`
-newpartend=`echo "$partstart + $partnewsize" | bc`
+partnewsize=`expr $minsize \* 4096 | tr -d '\n'`
+newpartend=`expr $partstart + $partnewsize | tr -d '\n'`
 part1=`parted $img rm 2`
 part2=`parted $img unit B mkpart primary $partstart $newpartend`
 
