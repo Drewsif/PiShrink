@@ -30,9 +30,7 @@ fi
 
 #Gather info
 beforesize=`ls -lah $img | cut -d ' ' -f 5`
-partinfo=`parted -m $img unit B print`
-partnumber=`echo "$partinfo" | grep ext4 | awk -F: ' { print $img } '`
-partstart=`echo "$partinfo" | grep ext4 | awk -F: ' { print substr($2,0,length($2)-1) } '`
+partstart=`parted -m $img unit B print | tail -n 1 | cut -d ':' -f 2 | tr -d 'B\n'`
 loopback=`losetup -f --show -o $partstart $img`
 
 #Make pi expand rootfs on next boot
@@ -54,7 +52,7 @@ umount $mountdir
 
 #Shrink filesystem
 e2fsck -f $loopback
-minsize=`resize2fs -P $loopback | awk -F': ' ' { print $2 } '`
+minsize=`resize2fs -P $loopback | cut -d ':' -f 2 | tr -d ' '`
 minsize=`echo $minsize+20000 | bc`
 resize2fs -p $loopback $minsize
 if [[ $? != 0 ]]; then
@@ -75,7 +73,7 @@ part1=`parted $img rm 2`
 part2=`parted $img unit B mkpart primary $partstart $newpartend`
 
 #Truncate the file
-endresult=`parted -m $img unit B print free | tail -1 | awk -F: ' { print substr($2,0,length($2)-1) } '`
+endresult=`parted -m $img unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B\n'`
 truncate -s $endresult $img
 aftersize=`ls -lah $img | cut -d ' ' -f 5`
 
