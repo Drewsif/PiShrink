@@ -25,6 +25,7 @@ fi
 
 #Gather info
 beforesize=`ls -lah $img | cut -d ' ' -f 5`
+partnum=`parted -m $img unit B print | tail -n 1 | cut -d ':' -f 1 | tr -d '\n'`
 partstart=`parted -m $img unit B print | tail -n 1 | cut -d ':' -f 2 | tr -d 'B\n'`
 loopback=`losetup -f --show -o $partstart $img`
 
@@ -64,7 +65,7 @@ sleep 1
 losetup -d $loopback
 partnewsize=`expr $minsize \* 4096 | tr -d '\n'`
 newpartend=`expr $partstart + $partnewsize | tr -d '\n'`
-part1=`parted $img rm 2`
+part1=`parted $img rm $partnum`
 part2=`parted $img unit B mkpart primary $partstart $newpartend`
 
 #Truncate the file
