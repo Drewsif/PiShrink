@@ -26,7 +26,7 @@ fi
 #Copy to new file if requested
 if [ -n "$2" ]; then
   echo "Copying $1 to $2..."
-  cp "$1" "$2"
+  cp --reflink=auto --sparse=always "$1" "$2"
   if (( $? != 0 )); then
    echo "ERROR: Could not copy file..."
    exit -5
