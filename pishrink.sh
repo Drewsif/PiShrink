@@ -4,7 +4,7 @@ img=$1
 
 #Usage checks
 if [[ -z $img ]]; then
-  echo "Usage: $0 imagefile.img"
+  echo "Usage: $0 imagefile.img [newimagefile.img]"
   exit -1
 fi
 if [[ ! -e $img ]]; then
@@ -21,6 +21,17 @@ A=`which parted 2>&1`
 if (( $? != 0 )); then
    echo "ERROR: parted is not installed."
    exit -4
+fi
+
+#Copy to new file if requested
+if [ -n "$2" ]; then
+  echo "Copying $1 to $2..."
+  cp "$1" "$2"
+  if (( $? != 0 )); then
+   echo "ERROR: Could not copy file..."
+   exit -5
+  fi
+  img=$2
 fi
 
 #Gather info
