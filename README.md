@@ -29,5 +29,7 @@ The filesystem on /dev/loop1 is now 773603 blocks long.
 Shrunk pi.img from 30G to 3.1G
 ```
 
-## Credits ##
-Thanks to SirLagz for the code to shrink http://sirlagz.net/2013/03/10/script-automatic-rpi-image-downsizer/
+## Contributing ##
+If you find a bug please create an issue for it. If you would like a new feature added, you can create an issue for it but I can't promise that I will get to it.
+
+Pull requests for new features and bug fixes are more than welcome!
