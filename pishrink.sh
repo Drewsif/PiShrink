@@ -39,6 +39,8 @@ beforesize=`ls -lah $img | cut -d ' ' -f 5`
 partnum=`parted -m $img unit B print | tail -n 1 | cut -d ':' -f 1 | tr -d '\n'`
 partstart=`parted -m $img unit B print | tail -n 1 | cut -d ':' -f 2 | tr -d 'B\n'`
 loopback=`losetup -f --show -o $partstart $img`
+currentsize=`tune2fs -l $loopback | grep 'Block count' | tr -d ' ' | cut -d ':' -f 2 | tr -d '\n'`
+blocksize=`tune2fs -l $loopback | grep 'Block size' | tr -d ' ' | cut -d ':' -f 2 | tr -d '\n'`
 
 #Make pi expand rootfs on next boot
 mountdir=`mktemp -d`
@@ -57,10 +59,24 @@ chmod +x $mountdir/etc/rc.local
 fi
 umount $mountdir
 
-#Shrink filesystem
+#Make sure filesystem is ok
 e2fsck -f $loopback
-minsize=`resize2fs -P $loopback | cut -d ':' -f 2 | tr -d ' '`
-minsize=`expr $minsize + 20000 | tr -d '\n'`
+minsize=`resize2fs -P $loopback | cut -d ':' -f 2 | tr -d ' ' | tr -d '\n'`
+if [[ $currentsize -eq $minsize ]]; then
+  echo ERROR: Image already shrunk to smallest size
+  exit -6
+fi
+
+#Add some free space to the end of the filesystem
+if [[ `expr $currentsize - $minsize - 5000` -gt 0 ]]; then
+  minsize=`expr $minsize + 5000 | tr -d '\n'`
+elif [[ `expr $currentsize - $minsize - 1000` -gt 0 ]]; then
+  minsize=`expr $minsize + 1000 | tr -d '\n'`
+elif [[ `expr $currentsize - $minsize - 100` -gt 0 ]]; then
+  minsize=`expr $minsize + 100 | tr -d '\n'`
+fi
+
+#Shrink filesystem
 resize2fs -p $loopback $minsize
 if [[ $? != 0 ]]; then
   echo ERROR: resize2fs failed...
@@ -74,7 +90,7 @@ sleep 1
 
 #Shrink partition
 losetup -d $loopback
-partnewsize=`expr $minsize \* 4096 | tr -d '\n'`
+partnewsize=`expr $minsize \* $blocksize | tr -d '\n'`
 newpartend=`expr $partstart + $partnewsize | tr -d '\n'`
 part1=`parted $img rm $partnum`
 part2=`parted $img unit B mkpart primary $partstart $newpartend`
