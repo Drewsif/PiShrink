@@ -1,11 +1,23 @@
 #!/bin/bash
+
+usage() { echo "Usage: $0 [-s] imagefile.img [newimagefile.img]"; exit -1; }
+
+should_skip_autoexpand=false
+
+while getopts ":s" opt; do
+    case "${opt}" in
+        s) should_skip_autoexpand=true ;;
+        *) usage ;;
+    esac
+done
+shift $((OPTIND-1))
+
 #Args
 img=$1
 
 #Usage checks
 if [[ -z $img ]]; then
-  echo "Usage: $0 imagefile.img [newimagefile.img]"
-  exit -1
+  usage
 fi
 if [[ ! -e $img ]]; then
   echo "ERROR: $img is not a file..."
@@ -42,22 +54,27 @@ loopback=`losetup -f --show -o $partstart $img`
 currentsize=`tune2fs -l $loopback | grep 'Block count' | tr -d ' ' | cut -d ':' -f 2 | tr -d '\n'`
 blocksize=`tune2fs -l $loopback | grep 'Block size' | tr -d ' ' | cut -d ':' -f 2 | tr -d '\n'`
 
-#Make pi expand rootfs on next boot
-mountdir=`mktemp -d`
-mount $loopback $mountdir
+#Check if we should make pi expand rootfs on next boot
+if [ "$should_skip_autoexpand" = false ]; then
+  #Make pi expand rootfs on next boot
+  mountdir=`mktemp -d`
+  mount $loopback $mountdir
 
-if [ `md5sum $mountdir/etc/rc.local | cut -d ' ' -f 1` != "a27a4d8192ea6ba713d2ddd15a55b1df" ]; then
-echo Creating new /etc/rc.local
-mv $mountdir/etc/rc.local $mountdir/etc/rc.local.bak
-cat <<\EOF > $mountdir/etc/rc.local
-#!/bin/bash
-/usr/bin/raspi-config --expand-rootfs
-rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; reboot
-exit 0
+  if [ `md5sum $mountdir/etc/rc.local | cut -d ' ' -f 1` != "a27a4d8192ea6ba713d2ddd15a55b1df" ]; then
+    echo Creating new /etc/rc.local
+    mv $mountdir/etc/rc.local $mountdir/etc/rc.local.bak
+    cat <<\EOF > $mountdir/etc/rc.local
+    #!/bin/bash
+    /usr/bin/raspi-config --expand-rootfs
+    rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; reboot
+    exit 0
 EOF
-chmod +x $mountdir/etc/rc.local
+    chmod +x $mountdir/etc/rc.local
+  fi
+  umount $mountdir
+else
+  echo Skipping autoexpanding process...
 fi
-umount $mountdir
 
 #Make sure filesystem is ok
 e2fsck -f $loopback
