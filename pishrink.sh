@@ -63,11 +63,12 @@ if [ "$should_skip_autoexpand" = false ]; then
   if [ `md5sum $mountdir/etc/rc.local | cut -d ' ' -f 1` != "a27a4d8192ea6ba713d2ddd15a55b1df" ]; then
     echo Creating new /etc/rc.local
     mv $mountdir/etc/rc.local $mountdir/etc/rc.local.bak
+    #Do not touch the following 6 lines including EOF. The md5sum check above depends on having the extact same bytes.
     cat <<\EOF > $mountdir/etc/rc.local
-    #!/bin/bash
-    /usr/bin/raspi-config --expand-rootfs
-    rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; reboot
-    exit 0
+#!/bin/bash
+/usr/bin/raspi-config --expand-rootfs
+rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; reboot
+exit 0
 EOF
     chmod +x $mountdir/etc/rc.local
   fi
