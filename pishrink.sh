@@ -5,10 +5,10 @@ usage() { echo "Usage: $0 [-s] imagefile.img [newimagefile.img]"; exit -1; }
 should_skip_autoexpand=false
 
 while getopts ":s" opt; do
-    case "${opt}" in
-        s) should_skip_autoexpand=true ;;
-        *) usage ;;
-    esac
+  case "${opt}" in
+    s) should_skip_autoexpand=true ;;
+    *) usage ;;
+  esac
 done
 shift $((OPTIND-1))
 
@@ -24,15 +24,15 @@ if [[ ! -e $img ]]; then
   exit -2
 fi
 if (( EUID != 0 )); then
-   echo "ERROR: You need to be running as root."
-   exit -3
+  echo "ERROR: You need to be running as root."
+  exit -3
 fi
 
 #Check that what we need is installed
 A=`which parted 2>&1`
 if (( $? != 0 )); then
-   echo "ERROR: parted is not installed."
-   exit -4
+  echo "ERROR: parted is not installed."
+  exit -4
 fi
 
 #Copy to new file if requested
@@ -40,8 +40,8 @@ if [ -n "$2" ]; then
   echo "Copying $1 to $2..."
   cp --reflink=auto --sparse=always "$1" "$2"
   if (( $? != 0 )); then
-   echo "ERROR: Could not copy file..."
-   exit -5
+    echo "ERROR: Could not copy file..."
+    exit -5
   fi
   img=$2
 fi
@@ -63,13 +63,14 @@ if [ "$should_skip_autoexpand" = false ]; then
   if [ `md5sum $mountdir/etc/rc.local | cut -d ' ' -f 1` != "a27a4d8192ea6ba713d2ddd15a55b1df" ]; then
     echo Creating new /etc/rc.local
     mv $mountdir/etc/rc.local $mountdir/etc/rc.local.bak
-    #Do not touch the following 6 lines including EOF. The md5sum check above depends on having the extact same bytes.
-    cat <<\EOF > $mountdir/etc/rc.local
+    ###Do not touch the following 6 lines including EOF###
+cat <<\EOF > $mountdir/etc/rc.local
 #!/bin/bash
 /usr/bin/raspi-config --expand-rootfs
 rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; reboot
 exit 0
 EOF
+    ###End no touch zone###
     chmod +x $mountdir/etc/rc.local
   fi
   umount $mountdir
