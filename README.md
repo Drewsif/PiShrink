@@ -2,8 +2,10 @@
 PiShrink is a bash script that automatically shrink a pi image that will then resize to the max size of the SD card on boot. This will make putting the image back onto the SD card faster and the shrunk images will compress better.
 
 `Usage: ./pishrink [-s] imagefile.img [newimagefile.img]`
+        ./pishrink [-s] </dev/sd_device>`
 
 If the `-s` option is given the script will skip the autoexpanding part of the process.  If you specify the `newimagefile.img` parameter, the script will make a copy of `imagefile.img` and work off that. You will need enough space to make a full copy of the image to use that option.
+If a device file (e.g. /dev/mmcblk0) is given as parameter, it will shrink the image directly on the SD card.
 
 ## Example ##
 ```bash
