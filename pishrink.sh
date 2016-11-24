@@ -150,8 +150,9 @@ part1=`parted $img rm $partnum`
 part2=`parted $img unit B mkpart primary $partstart $newpartend`
 
 #Truncate the file
-endresult=`parted -m $img unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B\n'`
-truncate -s $endresult $img
-aftersize=`ls -lah $img | cut -d ' ' -f 5`
-
-echo "Shrunk $img from $beforesize to $aftersize"
+if [[ -f $img ]]; then
+  endresult=`parted -m $img unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B\n'`
+  truncate -s $endresult $img
+  aftersize=`ls -lah $img | cut -d ' ' -f 5`
+  echo "Shrunk $img from $beforesize to $aftersize"
+fi
