@@ -38,7 +38,13 @@ fi
 #Copy to new file if requested
 if [ -n "$2" ]; then
   echo "Copying $1 to $2..."
-  cp --reflink=auto --sparse=always "$1" "$2"
+  if [[ -f $img ]]; then
+    cp --reflink=auto --sparse=always "$1" "$2"
+  else
+    imgsize=`parted -m $img unit B print | tail -1 | cut -d ':' -f 3 | tr -d 'B\n'`
+    imgsize=`expr $imgsize + 1`
+    dd if="$1" of="$2" conv=sparse count=$imgsize iflag=count_bytes bs=1M
+  fi
   if (( $? != 0 )); then
     echo "ERROR: Could not copy file..."
     exit -5
