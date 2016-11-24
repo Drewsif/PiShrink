@@ -1,12 +1,14 @@
 #!/bin/bash
 
-usage() { echo "Usage: $0 [-s] imagefile.img [newimagefile.img]"; exit -1; }
+usage() { echo "Usage: $0 [-s] [-i] imagefile.img [newimagefile.img]"; exit -1; }
 
 should_skip_autoexpand=false
+force_inplace_and_copy_after=false
 
-while getopts ":s" opt; do
+while getopts ":s:i" opt; do
   case "${opt}" in
     s) should_skip_autoexpand=true ;;
+    i) force_inplace_and_copy_after=true ;;
     *) usage ;;
   esac
 done
@@ -36,7 +38,7 @@ if (( $? != 0 )); then
 fi
 
 #Copy to new file if requested
-if [ -n "$2" ]; then
+if [ -n "$2" -a "$force_inplace_and_copy_after" = false ]; then
   echo "Copying $1 to $2..."
   if [[ -f $img ]]; then
     cp --reflink=auto --sparse=always "$1" "$2"
@@ -161,4 +163,22 @@ if [[ -f $img ]]; then
   truncate -s $endresult $img
   aftersize=`ls -lah $img | cut -d ' ' -f 5`
   echo "Shrunk $img from $beforesize to $aftersize"
+fi
+
+#Copy to new file if requested
+if [ -n "$2" -a "$force_inplace_and_copy_after" = true ]; then
+  echo "Copying $1 to $2..."
+  if [[ -f $img ]]; then
+    cp --reflink=auto --sparse=always "$1" "$2"
+  else
+    imgsize=`parted -m $img unit B print | tail -1 | cut -d ':' -f 3 | tr -d 'B\n'`
+    imgsize=`expr $imgsize + 1`
+    dd if="$1" of="$2" conv=sparse count=$imgsize iflag=count_bytes bs=1M
+  fi
+
+  if (( $? != 0 )); then
+    echo "ERROR: Could not copy file..."
+    exit -5
+  fi
+  img=$2
 fi
