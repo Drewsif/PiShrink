@@ -60,51 +60,16 @@ if [ "$should_skip_autoexpand" = false ]; then
   mountdir=`mktemp -d`
   mount $loopback $mountdir
 
-  if [ `md5sum $mountdir/etc/rc.local | cut -d ' ' -f 1` != "c4eb22d9aa99915af319287d194d4529" ]; then
+  if [ `md5sum $mountdir/etc/rc.local | cut -d ' ' -f 1` != "a27a4d8192ea6ba713d2ddd15a55b1df" ]; then
     echo Creating new /etc/rc.local
     mv $mountdir/etc/rc.local $mountdir/etc/rc.local.bak
     ###Do not touch the following 6 lines including EOF###
-cat <<\EOFE > $mountdir/etc/rc.local
+cat <<\EOF > $mountdir/etc/rc.local
 #!/bin/bash
-do_expand_rootfs() {
-  ROOT_PART=$(cat /proc/cmdline | tr -s ' ' '\n' | grep root= | cut -d '=' -f 2)
-  if [[ "$ROOT_PART" != /dev/mmcblk0* ]] ; then
-    echo $ROOT_PART is not an SD card...
-    return 0
-  fi
-  PART_NUM=$(echo $ROOT_PART | cut -d 'p' -f 2)
-
-  # Get the starting offset of the root partition
-  PART_START=$(fdisk -l /dev/mmcblk0 | grep $ROOT_PART | tr -s ' ' | cut -d ' ' -f 2)
-  [ "$PART_START" ] || return 1
-  # Return value will likely be error for fdisk as it fails to reload the
-  # partition table because the root fs is mounted
-  fdisk /dev/mmcblk0 <<EOF
-p
-d
-$PART_NUM
-n
-p
-$PART_NUM
-$PART_START
-
-w
-
-EOF
-
-cat <<EOF > /etc/rc.local &&
-#!/bin/sh
-resize2fs $ROOT_PART
-rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
-
-EOF
-reboot
-exit
-}
-do_expand_rootfs
-rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
+/usr/bin/raspi-config --expand-rootfs
+rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; reboot
 exit 0
-EOFE
+EOF
     ###End no touch zone###
     chmod +x $mountdir/etc/rc.local
   fi
