@@ -5,6 +5,9 @@ PiShrink is a bash script that automatically shrink a pi image that will then re
 
 If the `-s` option is given the script will skip the autoexpanding part of the process.  If you specify the `newimagefile.img` parameter, the script will make a copy of `imagefile.img` and work off that. You will need enough space to make a full copy of the image to use that option.
 
+## Prerequisites ##
+If using Ubuntu, you will likely see an error about `e2fsck` being out of date and `metadata_csum`. The simplest fix for this is to use Ubuntu 16.10 and up, as it will save you a lot of hassle in the long run.
+
 ## Example ##
 ```bash
 [user@localhost PiShrink]$ sudo ./shrink.sh pi.img
