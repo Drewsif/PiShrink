@@ -13,13 +13,13 @@ done
 shift $((OPTIND-1))
 
 #Args
-img=$1
+img="$1"
 
 #Usage checks
-if [[ -z $img ]]; then
+if [[ -z "$img" ]]; then
   usage
 fi
-if [[ ! -e $img ]]; then
+if [[ ! -e "$img" ]]; then
   echo "ERROR: $img is not a file..."
   exit -2
 fi
@@ -43,14 +43,14 @@ if [ -n "$2" ]; then
     echo "ERROR: Could not copy file..."
     exit -5
   fi
-  img=$2
+  img="$2"
 fi
 
 #Gather info
-beforesize=`ls -lah $img | cut -d ' ' -f 5`
-partnum=`parted -m $img unit B print | tail -n 1 | cut -d ':' -f 1 | tr -d '\n'`
-partstart=`parted -m $img unit B print | tail -n 1 | cut -d ':' -f 2 | tr -d 'B\n'`
-loopback=`losetup -f --show -o $partstart $img`
+beforesize=`ls -lah "$img" | cut -d ' ' -f 5`
+partnum=`parted -m "$img" unit B print | tail -n 1 | cut -d ':' -f 1 | tr -d '\n'`
+partstart=`parted -m "$img" unit B print | tail -n 1 | cut -d ':' -f 2 | tr -d 'B\n'`
+loopback=`losetup -f --show -o $partstart "$img"`
 currentsize=`tune2fs -l $loopback | grep 'Block count' | tr -d ' ' | cut -d ':' -f 2 | tr -d '\n'`
 blocksize=`tune2fs -l $loopback | grep 'Block size' | tr -d ' ' | cut -d ':' -f 2 | tr -d '\n'`
 
@@ -163,12 +163,12 @@ sleep 1
 losetup -d $loopback
 partnewsize=`expr $minsize \* $blocksize | tr -d '\n'`
 newpartend=`expr $partstart + $partnewsize | tr -d '\n'`
-part1=`parted $img rm $partnum`
-part2=`parted $img unit B mkpart primary $partstart $newpartend`
+part1=`parted "$img" rm $partnum`
+part2=`parted "$img" unit B mkpart primary $partstart $newpartend`
 
 #Truncate the file
-endresult=`parted -m $img unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B\n'`
-truncate -s $endresult $img
-aftersize=`ls -lah $img | cut -d ' ' -f 5`
+endresult=`parted -m "$img" unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B\n'`
+truncate -s $endresult "$img"
+aftersize=`ls -lah "$img" | cut -d ' ' -f 5`
 
 echo "Shrunk $img from $beforesize to $aftersize"
