@@ -131,7 +131,7 @@ else
 fi
 
 #Make sure filesystem is ok
-e2fsck -f $loopback
+e2fsck -p -f $loopback
 minsize=`resize2fs -P $loopback | cut -d ':' -f 2 | tr -d ' ' | tr -d '\n'`
 if [[ $currentsize -eq $minsize ]]; then
   echo ERROR: Image already shrunk to smallest size
