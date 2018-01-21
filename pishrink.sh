@@ -19,7 +19,7 @@ img="$1"
 if [[ -z "$img" ]]; then
   usage
 fi
-if [[ ! -e "$img" ]]; then
+if [[ ! -f "$img" ]]; then
   echo "ERROR: $img is not a file..."
   exit -2
 fi
