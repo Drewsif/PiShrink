@@ -143,13 +143,13 @@ if [[ $currentsize -eq $minsize ]]; then
 fi
 
 #Add some free space to the end of the filesystem
-if [[ $(expr $currentsize - $minsize - 5000) -gt 0 ]]; then
-  minsize=$(expr $minsize + 5000)
-elif [[ $(expr $currentsize - $minsize - 1000) -gt 0 ]]; then
-  minsize=$(expr $minsize + 1000)
-elif [[ $(expr $currentsize - $minsize - 100) -gt 0 ]]; then
-  minsize=$(expr $minsize + 100)
-fi
+extra_space=$(($currentsize - $minsize))
+for space in 5000 1000 100; do
+  if [[ $extra_space -gt $space ]]; then
+    minsize=$(($minsize + $space))
+    break
+  fi
+done
 
 #Shrink filesystem
 resize2fs -p "$loopback" $minsize
@@ -165,8 +165,8 @@ sleep 1
 
 #Shrink partition
 losetup -d "$loopback"
-partnewsize=$(expr $minsize \* $blocksize)
-newpartend=$(expr $partstart + $partnewsize)
+partnewsize=$(($minsize * $blocksize))
+newpartend=$(($partstart + $partnewsize))
 parted -s "$img" rm $partnum >/dev/null
 parted -s "$img" unit B mkpart primary $partstart $newpartend >/dev/null
 
