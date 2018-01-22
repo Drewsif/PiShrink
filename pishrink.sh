@@ -48,11 +48,11 @@ fi
 
 #Gather info
 beforesize=$(ls -lah "$img" | cut -d ' ' -f 5)
-partnum=$(parted -ms "$img" unit B print | tail -n 1 | cut -d ':' -f 1 | tr -d '\n')
-partstart=$(parted -ms "$img" unit B print | tail -n 1 | cut -d ':' -f 2 | tr -d 'B\n')
+partnum=$(parted -ms "$img" unit B print | tail -n 1 | cut -d ':' -f 1)
+partstart=$(parted -ms "$img" unit B print | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')
 loopback=$(losetup -f --show -o $partstart "$img")
-currentsize=$(tune2fs -l $loopback | grep 'Block count' | tr -d ' ' | cut -d ':' -f 2 | tr -d '\n')
-blocksize=$(tune2fs -l $loopback | grep 'Block size' | tr -d ' ' | cut -d ':' -f 2 | tr -d '\n')
+currentsize=$(tune2fs -l $loopback | grep 'Block count' | tr -d ' ' | cut -d ':' -f 2)
+blocksize=$(tune2fs -l $loopback | grep 'Block size' | tr -d ' ' | cut -d ':' -f 2)
 
 #Check if we should make pi expand rootfs on next boot
 if [ "$should_skip_autoexpand" = false ]; then
@@ -132,7 +132,7 @@ fi
 
 #Make sure filesystem is ok
 e2fsck -p -f $loopback
-minsize=$(resize2fs -P $loopback | cut -d ':' -f 2 | tr -d ' ' | tr -d '\n')
+minsize=$(resize2fs -P $loopback | cut -d ':' -f 2 | tr -d ' ')
 if [[ $currentsize -eq $minsize ]]; then
   echo "ERROR: Image already shrunk to smallest size"
   exit -6
@@ -140,11 +140,11 @@ fi
 
 #Add some free space to the end of the filesystem
 if [[ $(expr $currentsize - $minsize - 5000) -gt 0 ]]; then
-  minsize=$(expr $minsize + 5000 | tr -d '\n')
+  minsize=$(expr $minsize + 5000)
 elif [[ $(expr $currentsize - $minsize - 1000) -gt 0 ]]; then
-  minsize=$(expr $minsize + 1000 | tr -d '\n')
+  minsize=$(expr $minsize + 1000)
 elif [[ $(expr $currentsize - $minsize - 100) -gt 0 ]]; then
-  minsize=$(expr $minsize + 100 | tr -d '\n')
+  minsize=$(expr $minsize + 100)
 fi
 
 #Shrink filesystem
@@ -161,13 +161,13 @@ sleep 1
 
 #Shrink partition
 losetup -d $loopback
-partnewsize=$(expr $minsize \* $blocksize | tr -d '\n')
-newpartend=$(expr $partstart + $partnewsize | tr -d '\n')
+partnewsize=$(expr $minsize \* $blocksize)
+newpartend=$(expr $partstart + $partnewsize)
 parted -s "$img" rm $partnum >/dev/null
 parted -s "$img" unit B mkpart primary $partstart $newpartend >/dev/null
 
 #Truncate the file
-endresult=$(parted -ms "$img" unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B\n')
+endresult=$(parted -ms "$img" unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B')
 truncate -s $endresult "$img"
 aftersize=$(ls -lah "$img" | cut -d ' ' -f 5)
 
