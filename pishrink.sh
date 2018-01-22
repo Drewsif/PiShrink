@@ -29,7 +29,7 @@ if (( EUID != 0 )); then
 fi
 
 #Check that what we need is installed
-A=$(which parted 2>&1)
+which parted 2>&1 >/dev/null
 if (( $? != 0 )); then
   echo "ERROR: parted is not installed."
   exit -4
@@ -163,8 +163,8 @@ sleep 1
 losetup -d $loopback
 partnewsize=$(expr $minsize \* $blocksize | tr -d '\n')
 newpartend=$(expr $partstart + $partnewsize | tr -d '\n')
-part1=$(parted "$img" rm $partnum)
-part2=$(parted "$img" unit B mkpart primary $partstart $newpartend)
+parted "$img" rm $partnum >/dev/null
+parted "$img" unit B mkpart primary $partstart $newpartend >/dev/null
 
 #Truncate the file
 endresult=$(parted -m "$img" unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B\n')
