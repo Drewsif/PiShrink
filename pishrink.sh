@@ -52,7 +52,7 @@ parted_output=$(parted -ms "$img" unit B print | tail -n 1)
 partnum=$(echo "$parted_output" | cut -d ':' -f 1)
 partstart=$(echo "$parted_output" | cut -d ':' -f 2 | tr -d 'B')
 loopback=$(losetup -f --show -o $partstart "$img")
-tune2fs_output=$(tune2fs -l $loopback)
+tune2fs_output=$(tune2fs -l "$loopback")
 currentsize=$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)
 blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)
 
@@ -60,13 +60,13 @@ blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':
 if [ "$should_skip_autoexpand" = false ]; then
   #Make pi expand rootfs on next boot
   mountdir=$(mktemp -d)
-  mount $loopback $mountdir
+  mount "$loopback" "$mountdir"
 
-  if [ $(md5sum $mountdir/etc/rc.local | cut -d ' ' -f 1) != "0542054e9ff2d2e0507ea1ffe7d4fc87" ]; then
+  if [ $(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1) != "0542054e9ff2d2e0507ea1ffe7d4fc87" ]; then
     echo "Creating new /etc/rc.local"
-    mv $mountdir/etc/rc.local $mountdir/etc/rc.local.bak
+    mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
     #####Do not touch the following lines#####
-cat <<\EOF1 > $mountdir/etc/rc.local
+cat <<\EOF1 > "$mountdir/etc/rc.local"
 #!/bin/bash
 do_expand_rootfs() {
   ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
@@ -125,16 +125,16 @@ rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
 exit 0
 EOF1
     #####End no touch zone#####
-    chmod +x $mountdir/etc/rc.local
+    chmod +x "$mountdir/etc/rc.local"
   fi
-  umount $mountdir
+  umount "$mountdir"
 else
   echo "Skipping autoexpanding process..."
 fi
 
 #Make sure filesystem is ok
-e2fsck -p -f $loopback
-minsize=$(resize2fs -P $loopback | cut -d ':' -f 2 | tr -d ' ')
+e2fsck -p -f "$loopback"
+minsize=$(resize2fs -P "$loopback" | cut -d ':' -f 2 | tr -d ' ')
 if [[ $currentsize -eq $minsize ]]; then
   echo "ERROR: Image already shrunk to smallest size"
   exit -6
@@ -150,19 +150,19 @@ elif [[ $(expr $currentsize - $minsize - 100) -gt 0 ]]; then
 fi
 
 #Shrink filesystem
-resize2fs -p $loopback $minsize
+resize2fs -p "$loopback" $minsize
 if [[ $? != 0 ]]; then
   echo "ERROR: resize2fs failed..."
-  mount $loopback $mountdir
-  mv $mountdir/etc/rc.local.bak $mountdir/etc/rc.local
-  umount $mountdir
-  losetup -d $loopback
+  mount "$loopback" "$mountdir"
+  mv "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local"
+  umount "$mountdir"
+  losetup -d "$loopback"
   exit -7
 fi
 sleep 1
 
 #Shrink partition
-losetup -d $loopback
+losetup -d "$loopback"
 partnewsize=$(expr $minsize \* $blocksize)
 newpartend=$(expr $partstart + $partnewsize)
 parted -s "$img" rm $partnum >/dev/null
