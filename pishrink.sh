@@ -48,8 +48,8 @@ fi
 
 #Gather info
 beforesize=$(ls -lah "$img" | cut -d ' ' -f 5)
-partnum=$(parted -m "$img" unit B print | tail -n 1 | cut -d ':' -f 1 | tr -d '\n')
-partstart=$(parted -m "$img" unit B print | tail -n 1 | cut -d ':' -f 2 | tr -d 'B\n')
+partnum=$(parted -ms "$img" unit B print | tail -n 1 | cut -d ':' -f 1 | tr -d '\n')
+partstart=$(parted -ms "$img" unit B print | tail -n 1 | cut -d ':' -f 2 | tr -d 'B\n')
 loopback=$(losetup -f --show -o $partstart "$img")
 currentsize=$(tune2fs -l $loopback | grep 'Block count' | tr -d ' ' | cut -d ':' -f 2 | tr -d '\n')
 blocksize=$(tune2fs -l $loopback | grep 'Block size' | tr -d ' ' | cut -d ':' -f 2 | tr -d '\n')
@@ -163,11 +163,11 @@ sleep 1
 losetup -d $loopback
 partnewsize=$(expr $minsize \* $blocksize | tr -d '\n')
 newpartend=$(expr $partstart + $partnewsize | tr -d '\n')
-parted "$img" rm $partnum >/dev/null
-parted "$img" unit B mkpart primary $partstart $newpartend >/dev/null
+parted -s "$img" rm $partnum >/dev/null
+parted -s "$img" unit B mkpart primary $partstart $newpartend >/dev/null
 
 #Truncate the file
-endresult=$(parted -m "$img" unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B\n')
+endresult=$(parted -ms "$img" unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B\n')
 truncate -s $endresult "$img"
 aftersize=$(ls -lah "$img" | cut -d ' ' -f 5)
 
