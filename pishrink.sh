@@ -61,7 +61,7 @@ if [ "$should_skip_autoexpand" = false ]; then
   mount $loopback $mountdir
 
   if [ $(md5sum $mountdir/etc/rc.local | cut -d ' ' -f 1) != "0542054e9ff2d2e0507ea1ffe7d4fc87" ]; then
-    echo Creating new /etc/rc.local
+    echo "Creating new /etc/rc.local"
     mv $mountdir/etc/rc.local $mountdir/etc/rc.local.bak
     #####Do not touch the following lines#####
 cat <<\EOF1 > $mountdir/etc/rc.local
@@ -127,14 +127,14 @@ EOF1
   fi
   umount $mountdir
 else
-  echo Skipping autoexpanding process...
+  echo "Skipping autoexpanding process..."
 fi
 
 #Make sure filesystem is ok
 e2fsck -p -f $loopback
 minsize=$(resize2fs -P $loopback | cut -d ':' -f 2 | tr -d ' ' | tr -d '\n')
 if [[ $currentsize -eq $minsize ]]; then
-  echo ERROR: Image already shrunk to smallest size
+  echo "ERROR: Image already shrunk to smallest size"
   exit -6
 fi
 
@@ -150,7 +150,7 @@ fi
 #Shrink filesystem
 resize2fs -p $loopback $minsize
 if [[ $? != 0 ]]; then
-  echo ERROR: resize2fs failed...
+  echo "ERROR: resize2fs failed..."
   mount $loopback $mountdir
   mv $mountdir/etc/rc.local.bak $mountdir/etc/rc.local
   umount $mountdir
