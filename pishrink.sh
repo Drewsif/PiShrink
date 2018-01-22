@@ -45,6 +45,8 @@ if [ -n "$2" ]; then
     echo "ERROR: Could not copy file..."
     exit -5
   fi
+  old_owner=$(stat -c %u:%g "$1")
+  chown $old_owner "$2"
   img="$2"
 fi
 
