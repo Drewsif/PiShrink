@@ -48,11 +48,13 @@ fi
 
 #Gather info
 beforesize=$(ls -lah "$img" | cut -d ' ' -f 5)
-partnum=$(parted -ms "$img" unit B print | tail -n 1 | cut -d ':' -f 1)
-partstart=$(parted -ms "$img" unit B print | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')
+parted_output=$(parted -ms "$img" unit B print | tail -n 1)
+partnum=$(echo "$parted_output" | cut -d ':' -f 1)
+partstart=$(echo "$parted_output" | cut -d ':' -f 2 | tr -d 'B')
 loopback=$(losetup -f --show -o $partstart "$img")
-currentsize=$(tune2fs -l $loopback | grep 'Block count' | tr -d ' ' | cut -d ':' -f 2)
-blocksize=$(tune2fs -l $loopback | grep 'Block size' | tr -d ' ' | cut -d ':' -f 2)
+tune2fs_output=$(tune2fs -l $loopback)
+currentsize=$(echo "$tune2fs_output" | grep 'Block count' | tr -d ' ' | cut -d ':' -f 2)
+blocksize=$(echo "$tune2fs_output" | grep 'Block size' | tr -d ' ' | cut -d ':' -f 2)
 
 #Check if we should make pi expand rootfs on next boot
 if [ "$should_skip_autoexpand" = false ]; then
