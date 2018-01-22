@@ -29,11 +29,13 @@ if (( EUID != 0 )); then
 fi
 
 #Check that what we need is installed
-which parted 2>&1 >/dev/null
-if (( $? != 0 )); then
-  echo "ERROR: parted is not installed."
-  exit -4
-fi
+for command in parted losetup tune2fs md5sum e2fsck resize2fs; do
+  which $command 2>&1 >/dev/null
+  if (( $? != 0 )); then
+    echo "ERROR: $command is not installed."
+    exit -4
+  fi
+done
 
 #Copy to new file if requested
 if [ -n "$2" ]; then
