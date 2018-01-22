@@ -47,7 +47,7 @@ if [ -n "$2" ]; then
 fi
 
 #Gather info
-beforesize=$(ls -lah "$img" | cut -d ' ' -f 5)
+beforesize=$(ls -lh "$img" | cut -d ' ' -f 5)
 parted_output=$(parted -ms "$img" unit B print | tail -n 1)
 partnum=$(echo "$parted_output" | cut -d ':' -f 1)
 partstart=$(echo "$parted_output" | cut -d ':' -f 2 | tr -d 'B')
@@ -171,6 +171,6 @@ parted -s "$img" unit B mkpart primary $partstart $newpartend >/dev/null
 #Truncate the file
 endresult=$(parted -ms "$img" unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B')
 truncate -s $endresult "$img"
-aftersize=$(ls -lah "$img" | cut -d ' ' -f 5)
+aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
 
 echo "Shrunk $img from $beforesize to $aftersize"
