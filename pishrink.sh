@@ -155,7 +155,7 @@ if [[ $? != 0 ]]; then
   mv $mountdir/etc/rc.local.bak $mountdir/etc/rc.local
   umount $mountdir
   losetup -d $loopback
-  exit $rc
+  exit -7
 fi
 sleep 1
 
