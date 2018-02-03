@@ -169,7 +169,7 @@ sleep 1
 losetup -d "$loopback"
 partnewsize=$(($minsize * $blocksize))
 newpartend=$(($partstart + $partnewsize))
-parted -s "$img" rm $partnum >/dev/null
+parted -s -a minimal "$img" rm $partnum >/dev/null
 parted -s "$img" unit B mkpart primary $partstart $newpartend >/dev/null
 
 #Truncate the file
