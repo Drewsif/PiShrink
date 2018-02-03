@@ -29,11 +29,13 @@ if (( EUID != 0 )); then
 fi
 
 #Check that what we need is installed
-A=`which parted 2>&1`
-if (( $? != 0 )); then
-  echo "ERROR: parted is not installed."
-  exit -4
-fi
+for command in parted losetup tune2fs md5sum e2fsck resize2fs; do
+  which $command 2>&1 >/dev/null
+  if (( $? != 0 )); then
+    echo "ERROR: $command is not installed."
+    exit -4
+  fi
+done
 
 #Copy to new file if requested
 if [ -n "$2" ]; then
@@ -43,28 +45,32 @@ if [ -n "$2" ]; then
     echo "ERROR: Could not copy file..."
     exit -5
   fi
+  old_owner=$(stat -c %u:%g "$1")
+  chown $old_owner "$2"
   img="$2"
 fi
 
 #Gather info
-beforesize=`ls -lah "$img" | cut -d ' ' -f 5`
-partnum=`parted -m "$img" unit B print | tail -n 1 | cut -d ':' -f 1 | tr -d '\n'`
-partstart=`parted -m "$img" unit B print | tail -n 1 | cut -d ':' -f 2 | tr -d 'B\n'`
-loopback=`losetup -f --show -o $partstart "$img"`
-currentsize=`tune2fs -l $loopback | grep 'Block count' | tr -d ' ' | cut -d ':' -f 2 | tr -d '\n'`
-blocksize=`tune2fs -l $loopback | grep 'Block size' | tr -d ' ' | cut -d ':' -f 2 | tr -d '\n'`
+beforesize=$(ls -lh "$img" | cut -d ' ' -f 5)
+parted_output=$(parted -ms "$img" unit B print | tail -n 1)
+partnum=$(echo "$parted_output" | cut -d ':' -f 1)
+partstart=$(echo "$parted_output" | cut -d ':' -f 2 | tr -d 'B')
+loopback=$(losetup -f --show -o $partstart "$img")
+tune2fs_output=$(tune2fs -l "$loopback")
+currentsize=$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)
+blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)
 
 #Check if we should make pi expand rootfs on next boot
 if [ "$should_skip_autoexpand" = false ]; then
   #Make pi expand rootfs on next boot
-  mountdir=`mktemp -d`
-  mount $loopback $mountdir
+  mountdir=$(mktemp -d)
+  mount "$loopback" "$mountdir"
 
-  if [ `md5sum $mountdir/etc/rc.local | cut -d ' ' -f 1` != "0542054e9ff2d2e0507ea1ffe7d4fc87" ]; then
-    echo Creating new /etc/rc.local
-    mv $mountdir/etc/rc.local $mountdir/etc/rc.local.bak
+  if [ $(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1) != "0542054e9ff2d2e0507ea1ffe7d4fc87" ]; then
+    echo "Creating new /etc/rc.local"
+    mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
     #####Do not touch the following lines#####
-cat <<\EOF1 > $mountdir/etc/rc.local
+cat <<\EOF1 > "$mountdir/etc/rc.local"
 #!/bin/bash
 do_expand_rootfs() {
   ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
@@ -123,52 +129,52 @@ rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
 exit 0
 EOF1
     #####End no touch zone#####
-    chmod +x $mountdir/etc/rc.local
+    chmod +x "$mountdir/etc/rc.local"
   fi
-  umount $mountdir
+  umount "$mountdir"
 else
-  echo Skipping autoexpanding process...
+  echo "Skipping autoexpanding process..."
 fi
 
 #Make sure filesystem is ok
-e2fsck -p -f $loopback
-minsize=`resize2fs -P $loopback | cut -d ':' -f 2 | tr -d ' ' | tr -d '\n'`
+e2fsck -p -f "$loopback"
+minsize=$(resize2fs -P "$loopback" | cut -d ':' -f 2 | tr -d ' ')
 if [[ $currentsize -eq $minsize ]]; then
-  echo ERROR: Image already shrunk to smallest size
+  echo "ERROR: Image already shrunk to smallest size"
   exit -6
 fi
 
 #Add some free space to the end of the filesystem
-if [[ `expr $currentsize - $minsize - 5000` -gt 0 ]]; then
-  minsize=`expr $minsize + 5000 | tr -d '\n'`
-elif [[ `expr $currentsize - $minsize - 1000` -gt 0 ]]; then
-  minsize=`expr $minsize + 1000 | tr -d '\n'`
-elif [[ `expr $currentsize - $minsize - 100` -gt 0 ]]; then
-  minsize=`expr $minsize + 100 | tr -d '\n'`
-fi
+extra_space=$(($currentsize - $minsize))
+for space in 5000 1000 100; do
+  if [[ $extra_space -gt $space ]]; then
+    minsize=$(($minsize + $space))
+    break
+  fi
+done
 
 #Shrink filesystem
-resize2fs -p $loopback $minsize
+resize2fs -p "$loopback" $minsize
 if [[ $? != 0 ]]; then
-  echo ERROR: resize2fs failed...
-  mount $loopback $mountdir
-  mv $mountdir/etc/rc.local.bak $mountdir/etc/rc.local
-  umount $mountdir
-  losetup -d $loopback
+  echo "ERROR: resize2fs failed..."
+  mount "$loopback" "$mountdir"
+  mv "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local"
+  umount "$mountdir"
+  losetup -d "$loopback"
   exit -7
 fi
 sleep 1
 
 #Shrink partition
-losetup -d $loopback
-partnewsize=`expr $minsize \* $blocksize | tr -d '\n'`
-newpartend=`expr $partstart + $partnewsize | tr -d '\n'`
-part1=`parted "$img" rm $partnum`
-part2=`parted "$img" unit B mkpart primary $partstart $newpartend`
+losetup -d "$loopback"
+partnewsize=$(($minsize * $blocksize))
+newpartend=$(($partstart + $partnewsize))
+parted -s "$img" rm $partnum >/dev/null
+parted -s "$img" unit B mkpart primary $partstart $newpartend >/dev/null
 
 #Truncate the file
-endresult=`parted -m "$img" unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B\n'`
+endresult=$(parted -ms "$img" unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B')
 truncate -s $endresult "$img"
-aftersize=`ls -lah "$img" | cut -d ' ' -f 5`
+aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
 
 echo "Shrunk $img from $beforesize to $aftersize"
