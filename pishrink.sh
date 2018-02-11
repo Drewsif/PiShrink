@@ -1,12 +1,14 @@
 #!/bin/bash
 
-usage() { echo "Usage: $0 [-s] imagefile.img [newimagefile.img]"; exit -1; }
+usage() { echo "Usage: $0 [-s|-k] imagefile.img [newimagefile.img]"; exit -1; }
 
 should_skip_autoexpand=false
+remove_ssh_keys=false
 
-while getopts ":s" opt; do
+while getopts ":sk" opt; do
   case "${opt}" in
     s) should_skip_autoexpand=true ;;
+    k) remove_ssh_keys=true ;;
     *) usage ;;
   esac
 done
@@ -59,6 +61,32 @@ loopback=$(losetup -f --show -o $partstart "$img")
 tune2fs_output=$(tune2fs -l "$loopback")
 currentsize=$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)
 blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)
+
+# Remove ssh keys if requested
+if [ "$remove_ssh_keys" = true ]; then
+  echo "Removing ssh keys..."
+  mountdir=$(mktemp -d)
+  mount "$loopback" "$mountdir"
+
+  # Remove keys and create script to recreate them on next boot
+  rm -f -v $mountdir/etc/ssh/ssh_host_*_key*
+  cat <<\EOF > "$mountdir/lib/systemd/system/regenerate_ssh_host_keys.service"
+[Unit]
+Description=Regenerate SSH host keys
+Before=ssh.service
+
+[Service]
+Type=oneshot
+ExecStartPre=-/bin/dd if=/dev/hwrng of=/dev/urandom count=1 bs=4096
+ExecStartPre=-/bin/sh -c "/bin/rm -f -v /etc/ssh/ssh_host_*_key*"
+ExecStart=/usr/bin/ssh-keygen -A -v
+ExecStartPost=/bin/sh -c "/bin/rm -f -v /lib/systemd/system/regenerate_ssh_host_keys.service"
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  umount "$mountdir"
+fi
 
 #Check if we should make pi expand rootfs on next boot
 if [ "$should_skip_autoexpand" = false ]; then
@@ -146,6 +174,7 @@ fi
 
 #Add some free space to the end of the filesystem
 extra_space=$(($currentsize - $minsize))
+echo "Extra_space $extra_space"
 for space in 5000 1000 100; do
   if [[ $extra_space -gt $space ]]; then
     minsize=$(($minsize + $space))
