@@ -1,14 +1,14 @@
 #!/bin/bash
 
-usage() { echo "Usage: $0 [-s|-k] imagefile.img [newimagefile.img]"; exit -1; }
+usage() { echo "Usage: $0 [-s|-c] imagefile.img [newimagefile.img]"; exit -1; }
 
 should_skip_autoexpand=false
-remove_ssh_keys=false
+cleanup_image=false
 
-while getopts ":sk" opt; do
+while getopts ":sc" opt; do
   case "${opt}" in
     s) should_skip_autoexpand=true ;;
-    k) remove_ssh_keys=true ;;
+    c) cleanup_image=true ;;
     *) usage ;;
   esac
 done
@@ -63,11 +63,18 @@ currentsize=$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d
 blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)
 
 # Remove ssh keys if requested
-if [ "$remove_ssh_keys" = true ]; then
-  echo "Removing ssh keys..."
+if [ "$cleanup_image" = true ]; then
   mountdir=$(mktemp -d)
   mount "$loopback" "$mountdir"
 
+  echo "Removing old files..."
+  # cleanup apt cache
+  rm -f $mountdir/var/cache/apt/archives/*.deb
+  rm -f $mountdir/var/cache/apt/archives/partial/*
+  # remove log files
+  rm -f $mountdir/var/log/*.log
+  
+  echo "Removing ssh keys..."
   # Remove keys and create script to recreate them on next boot
   rm -f -v $mountdir/etc/ssh/ssh_host_*_key*
   cat <<\EOF > "$mountdir/lib/systemd/system/regenerate_ssh_host_keys.service"
