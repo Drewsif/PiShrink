@@ -1,5 +1,9 @@
 #!/bin/bash
 
+function cleanup() {
+  losetup -d "$loopback" || true
+}
+
 usage() { echo "Usage: $0 [-s] imagefile.img [newimagefile.img]"; exit -1; }
 
 should_skip_autoexpand=false
@@ -49,6 +53,9 @@ if [ -n "$2" ]; then
   chown $old_owner "$2"
   img="$2"
 fi
+
+# cleanup at script exit
+trap cleanup ERR EXIT
 
 #Gather info
 beforesize=$(ls -lh "$img" | cut -d ' ' -f 5)
@@ -166,7 +173,6 @@ fi
 sleep 1
 
 #Shrink partition
-losetup -d "$loopback"
 partnewsize=$(($minsize * $blocksize))
 newpartend=$(($partstart + $partnewsize))
 parted -s -a minimal "$img" rm $partnum >/dev/null
