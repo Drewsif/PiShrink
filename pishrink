@@ -86,9 +86,7 @@ sleep 1
 #Truncate the file
 endresult=$(($newpartend * 512))
 endresult=$(($endresult + 1))
-dd if="$img" of="$img-shrinked.img" bs=512 count=$endresult
-aftersize=$(ls -lh "$img-shrinked.img" | tr -s " " | cut -d " " -f 5)
-rm -f "$img"
-mv "$img-shrinked.img" "$img"
+truncate -s $endresult "$img"
+aftersize=$(ls -lh "$img" | tr -s " " | cut -d " " -f 5)
 
 echo "Shrunk $img from $beforesize to $aftersize"

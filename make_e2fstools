@@ -43,5 +43,11 @@ cp -a e2fsck/e2fsck "$BASE"
 cp -a resize/resize2fs "$BASE"
 cp -a misc/tune2fs "$BASE"
 
+download https://ftp.gnu.org/gnu/coreutils/coreutils-8.29.tar.xz
+cd core*
+./configure --prefix "$TARGET" --disable-nls
+make
+cp -a src/truncate "$BASE"
+
 cd "$BASE"
 diskutil eject "/Volumes/Ramdisk"
