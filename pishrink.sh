@@ -2,14 +2,6 @@
 
 usage() { echo "Usage: $0 imagefile.img [newimagefile.img]"; exit -1; }
 
-while getopts ":s" opt; do
-  case "${opt}" in
-    s) should_skip_autoexpand=true ;;
-    *) usage ;;
-  esac
-done
-shift $((OPTIND-1))
-
 #Args
 img="$1"
 
@@ -20,10 +12,6 @@ fi
 if [[ ! -f "$img" ]]; then
   echo "ERROR: $img is not a file..."
   exit -2
-fi
-if (( EUID != 0 )); then
-  echo "ERROR: You need to be running as root."
-  exit -3
 fi
 
 #Check that what we need is installed
@@ -57,7 +45,6 @@ loopback=$(losetup -f --show -o $partstart "$img")
 tune2fs_output=$(tune2fs -l "$loopback")
 currentsize=$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)
 blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)
-
 
 #Make sure filesystem is ok
 e2fsck -p -f "$loopback"
