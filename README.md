@@ -1,12 +1,12 @@
 # PiShrink-macOS#
 This is a port of PiShrink bash script for Linux to run under macOS.
 
-PiShrink [https://github.com/Drewsif/PiShrink](https://github.com/Drewsif/PiShrink) is a bash script that automatically shrinks a pi image that will then resize to the max size of the SD card on boot. This will make putting the image back onto the SD card faster and the shrunk images will compress better.
+PiShrink [https://github.com/Drewsif/PiShrink](https://github.com/Drewsif/PiShrink) is a bash script that automatically shrinks a pi image. This will make putting the image back onto the SD card faster and the shrunk images will compress better.
 
 Besides the original script it uses a few utils for the ext2/3/4 filesystem. All of these tools can be easily build by running the provided helper scripts in this repository. For mor information see below.
 
 ## Usage ##
-`sudo pishrink.sh imagefile.img [newimagefile.img]`
+`pishrink.sh imagefile.img [newimagefile.img]`
 
 If you specify the `newimagefile.img` parameter, the script will make a copy of `imagefile.img` and work off that. You will need enough space to make a full copy of the image to use that option.
 
@@ -15,10 +15,16 @@ If you are trying to shrink a [NOOBS](https://github.com/raspberrypi/noobs) imag
 
 
 ## Installation ##
+Since you are using a RaspberryPi I'm quite sure, that you've already installed Xcode and the Xcode commandline tools. If not, please do so.
+
+Then download the zip archive, uncompress it, run make and sudo amke install. Here are the corresponding commands:
+
 ```bash
-wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
-chmod +x pishrink.sh
-sudo mv pishrink.sh /usr/local/bin
+curl -LO https://github.com/lisanet/PiShrink-macOS/archive/master.zip
+unzip master
+cd PiShrink-macOS-master
+make
+sudo make install
 ```
 
 ## Example ##
