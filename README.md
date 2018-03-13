@@ -6,7 +6,7 @@ PiShrink [https://github.com/Drewsif/PiShrink](https://github.com/Drewsif/PiShri
 Besides the original script it uses a few utils for the ext2/3/4 filesystem. All of these tools can be easily build by running the provided helper scripts in this repository. For mor information see below.
 
 ## Usage ##
-`pishrink.sh imagefile.img [newimagefile.img]`
+`pishrink imagefile.img [newimagefile.img]`
 
 If you specify the `newimagefile.img` parameter, the script will make a copy of `imagefile.img` and work off that. You will need enough space to make a full copy of the image to use that option.
 
