@@ -10,12 +10,14 @@
 		FC4E6AAC2058556E00CBFDDA /* LICENSE */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
 		FC4E6AAD2058556E00CBFDDA /* pishrink.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = pishrink.sh; sourceTree = "<group>"; };
 		FC4E6AAE2058556E00CBFDDA /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		FC7662F520586426003556C0 /* make_e2fstools */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = make_e2fstools; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
 		FC4E6AA1205854F700CBFDDA = {
 			isa = PBXGroup;
 			children = (
+				FC7662F520586426003556C0 /* make_e2fstools */,
 				FC4E6AAC2058556E00CBFDDA /* LICENSE */,
 				FC4E6AAD2058556E00CBFDDA /* pishrink.sh */,
 				FC4E6AAE2058556E00CBFDDA /* README.md */,

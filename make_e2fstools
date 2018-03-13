@@ -1,0 +1,47 @@
+#!/bin/bash
+
+#  make_e2fstools
+#  PiShrink-macOS
+#
+#  Created by Simone Karin Lehmann on 13.03.18.
+#  Copyright © 2018 LisaNet, BSD 2 clause license
+#
+
+### functions
+download ()
+{
+cd "$PACKAGES"
+down_FILE=$(basename "$1")
+test -e "$down_FILE" || curl -LO "$1"
+cd "$CMPL"
+tar -xzf "$PACKAGES/$down_FILE"
+}
+
+BASE=$(pwd)
+PACKAGES="/Volumes/Ramdisk/packages"
+TARGET="/Volumes/Ramdisk/sw"
+CMPL="/Volumes/Ramdisk/compile"
+export CC=clang
+
+### create RAM disk
+if [ ! -e "/Volumes/Ramdisk" ]; then
+  DEVICE=$(hdiutil attach -nomount ram://2048000)
+  newfs_hfs -v Ramdisk $DEVICE
+  diskutil mount $DEVICE
+fi
+
+### set up dirs
+mkdir "$PACKAGES"
+mkdir "$TARGET"
+mkdir "$CMPL"
+
+download https://netix.dl.sourceforge.net/project/e2fsprogs/e2fsprogs/v1.44.0/e2fsprogs-1.44.0.tar.gz
+cd e2fs*
+./configure --prefix "$TARGET" --disable-nls
+make
+cp -a e2fsck/e2fsck "$BASE"
+cp -a resize/resize2fs "$BASE"
+cp -a misc/tune2fs "$BASE"
+
+cd "$BASE"
+diskutil eject "/Volumes/Ramdisk"
