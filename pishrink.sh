@@ -1,8 +1,6 @@
 #!/bin/bash
 
-usage() { echo "Usage: $0 [-s] imagefile.img [newimagefile.img]"; exit -1; }
-
-should_skip_autoexpand=false
+usage() { echo "Usage: $0 imagefile.img [newimagefile.img]"; exit -1; }
 
 while getopts ":s" opt; do
   case "${opt}" in
@@ -60,81 +58,6 @@ tune2fs_output=$(tune2fs -l "$loopback")
 currentsize=$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)
 blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)
 
-#Check if we should make pi expand rootfs on next boot
-if [ "$should_skip_autoexpand" = false ]; then
-  #Make pi expand rootfs on next boot
-  mountdir=$(mktemp -d)
-  mount "$loopback" "$mountdir"
-
-  if [ $(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1) != "0542054e9ff2d2e0507ea1ffe7d4fc87" ]; then
-    echo "Creating new /etc/rc.local"
-    mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
-    #####Do not touch the following lines#####
-cat <<\EOF1 > "$mountdir/etc/rc.local"
-#!/bin/bash
-do_expand_rootfs() {
-  ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
-
-  PART_NUM=${ROOT_PART#mmcblk0p}
-  if [ "$PART_NUM" = "$ROOT_PART" ]; then
-    echo "$ROOT_PART is not an SD card. Don't know how to expand"
-    return 0
-  fi
-
-  # Get the starting offset of the root partition
-  PART_START=$(parted /dev/mmcblk0 -ms unit s p | grep "^${PART_NUM}" | cut -f 2 -d: | sed 's/[^0-9]//g')
-  [ "$PART_START" ] || return 1
-  # Return value will likely be error for fdisk as it fails to reload the
-  # partition table because the root fs is mounted
-  fdisk /dev/mmcblk0 <<EOF
-p
-d
-$PART_NUM
-n
-p
-$PART_NUM
-$PART_START
-
-p
-w
-EOF
-
-cat <<EOF > /etc/rc.local &&
-#!/bin/sh
-echo "Expanding /dev/$ROOT_PART"
-resize2fs /dev/$ROOT_PART
-rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
-
-EOF
-reboot
-exit
-}
-raspi_config_expand() {
-/usr/bin/env raspi-config --expand-rootfs
-if [[ $? != 0 ]]; then
-  return -1
-else
-  rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
-  reboot
-  exit
-fi
-}
-raspi_config_expand
-echo "WARNING: Using backup expand..."
-sleep 5
-do_expand_rootfs
-echo "ERROR: Expanding failed..."
-sleep 5
-rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
-exit 0
-EOF1
-    #####End no touch zone#####
-    chmod +x "$mountdir/etc/rc.local"
-  fi
-  umount "$mountdir"
-else
-  echo "Skipping autoexpanding process..."
-fi
 
 #Make sure filesystem is ok
 e2fsck -p -f "$loopback"
