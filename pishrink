@@ -84,7 +84,8 @@ EOF2
 sleep 1
 
 #Truncate the file
-endresult=$(($partnewsize + 1))
+endresult=$(($newpartend * 512))
+endresult=$(($endresult + 1))
 dd if="$img" of="$img-shrinked.img" bs=512 count=$endresult
 aftersize=$(ls -lh "$img-shrinked.img" | tr -s " " | cut -d " " -f 5)
 rm -f "$img"
