@@ -15,7 +15,7 @@ if [[ ! -f "$img" ]]; then
 fi
 
 #Check that what we need is installed
-for command in parted losetup tune2fs md5sum e2fsck resize2fs; do
+for command in tune2fs e2fsck resize2fs; do
   which $command 2>&1 >/dev/null
   if (( $? != 0 )); then
     echo "ERROR: $command is not installed."
@@ -26,65 +26,68 @@ done
 #Copy to new file if requested
 if [ -n "$2" ]; then
   echo "Copying $1 to $2..."
-  cp --reflink=auto --sparse=always "$1" "$2"
+  cp "$1" "$2"
   if (( $? != 0 )); then
     echo "ERROR: Could not copy file..."
     exit -5
   fi
-  old_owner=$(stat -c %u:%g "$1")
-  chown $old_owner "$2"
   img="$2"
 fi
 
 #Gather info
-beforesize=$(ls -lh "$img" | cut -d ' ' -f 5)
-parted_output=$(parted -ms "$img" unit B print | tail -n 1)
-partnum=$(echo "$parted_output" | cut -d ':' -f 1)
-partstart=$(echo "$parted_output" | cut -d ':' -f 2 | tr -d 'B')
-loopback=$(losetup -f --show -o $partstart "$img")
+beforesize=$(ls -lh "$img" | tr -s " " | cut -d " " -f 5)
+partnum=$(fdisk "$img" | grep Linux | cut -d ":" -f1 | tr -d " ")
+partstart=$(fdisk -d "$img" | grep 0x83 | cut -d "," -f1)
+loopback=$(hdiutil attach -nomount "$img" | grep Linux | cut -d " " -f1)
 tune2fs_output=$(tune2fs -l "$loopback")
 currentsize=$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)
 blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)
 
-#Make sure filesystem is ok
-e2fsck -p -f "$loopback"
+#Make sure filesystem is ok, force yes on all questions
+e2fsck -y -f "$loopback"
 minsize=$(resize2fs -P "$loopback" | cut -d ':' -f 2 | tr -d ' ')
-if [[ $currentsize -eq $minsize ]]; then
-  echo "ERROR: Image already shrunk to smallest size"
-  exit -6
-fi
 
-#Add some free space to the end of the filesystem
-extra_space=$(($currentsize - $minsize))
-for space in 5000 1000 100; do
-  if [[ $extra_space -gt $space ]]; then
-    minsize=$(($minsize + $space))
-    break
-  fi
-done
+# add ~200 MB of extra space, the system may need it to run
+minsize=$(($minsize + 50000))
+
+if [[ $minsize -gt $currentsize ]]; then
+echo "ERROR: Image already shrunk to smallest size"
+exit -6
+fi
 
 #Shrink filesystem
 resize2fs -p "$loopback" $minsize
 if [[ $? != 0 ]]; then
   echo "ERROR: resize2fs failed..."
-  mount "$loopback" "$mountdir"
-  mv "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local"
-  umount "$mountdir"
-  losetup -d "$loopback"
+  hdiutil detach $loopback
   exit -7
 fi
 sleep 1
 
 #Shrink partition
-losetup -d "$loopback"
-partnewsize=$(($minsize * $blocksize))
+hdiutil detach $loopback
+# fdisk uses a block size of 512 Bytes!
+partnewsize=$(($minsize * $blocksize / 512))
 newpartend=$(($partstart + $partnewsize))
-parted -s -a minimal "$img" rm $partnum >/dev/null
-parted -s "$img" unit B mkpart primary $partstart $newpartend >/dev/null
+
+# now use fdisk to change the partition
+fdisk -e "$img" <<EOF2
+e $partnum
+
+
+
+$newpartend
+w
+q
+
+EOF2
+sleep 1
 
 #Truncate the file
-endresult=$(parted -ms "$img" unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B')
-truncate -s $endresult "$img"
-aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
+endresult=$(($partnewsize + 1))
+dd if="$img" of="$img-shrinked.img" bs=512 count=$endresult
+aftersize=$(ls -lh "$img-shrinked.img" | tr -s " " | cut -d " " -f 5)
+rm -f "$img"
+mv "$img-shrinked.img" "$img"
 
 echo "Shrunk $img from $beforesize to $aftersize"
