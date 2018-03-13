@@ -1,4 +1,4 @@
-# PiShrink-macOS#
+# PiShrink-macOS #
 This is a port of PiShrink bash script for Linux to run under macOS.
 
 PiShrink [https://github.com/Drewsif/PiShrink](https://github.com/Drewsif/PiShrink) is a bash script that automatically shrinks a pi image. This will make putting the image back onto the SD card faster and the shrunk images will compress better.
@@ -15,9 +15,9 @@ If you are trying to shrink a [NOOBS](https://github.com/raspberrypi/noobs) imag
 
 
 ## Installation ##
-Since you are using a RaspberryPi I'm quite sure, that you've already installed Xcode and the Xcode commandline tools. If not, please do so.
+Since you are using a RaspberryPi, I'm quite sure, that you've already installed Xcode and the Xcode command line tools. If not, please do so.
 
-Then download the zip archive, uncompress it, run make and sudo amke install. Here are the corresponding commands:
+Then download the zip archive, uncompress it, run make and sudo make install. Here are the corresponding commands:
 
 ```bash
 curl -LO https://github.com/lisanet/PiShrink-macOS/archive/master.zip
@@ -29,7 +29,7 @@ sudo make install
 
 ## Example ##
 ```bash
-[user@localhost PiShrink]$ sudo pishrink.sh pi.img
+[user@localhost PiShrink]$ pishrink pi.img
 e2fsck 1.42.9 (28-Dec-2013)
 Pass 1: Checking inodes, blocks, and sizes
 Pass 2: Checking directory structure
@@ -51,7 +51,4 @@ The filesystem on /dev/loop1 is now 773603 blocks long.
 Shrunk pi.img from 30G to 3.1G
 ```
 
-## Contributing ##
-If you find a bug please create an issue for it. If you would like a new feature added, you can create an issue for it but I can't promise that I will get to it.
 
-Pull requests for new features and bug fixes are more than welcome!
