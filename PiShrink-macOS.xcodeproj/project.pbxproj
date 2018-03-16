@@ -11,7 +11,7 @@
 		FC4E6AAD2058556E00CBFDDA /* pishrink */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = pishrink; sourceTree = "<group>"; };
 		FC4E6AAE2058556E00CBFDDA /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		FC7662F520586426003556C0 /* make_e2fstools */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = make_e2fstools; sourceTree = "<group>"; };
-		FC7662F620586871003556C0 /* Makefile */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
+		FC7662F620586871003556C0 /* Makefile */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; usesTabs = 1; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */

@@ -17,4 +17,4 @@ install:
 	install -m 755 truncate /usr/local/bin
 
 uninstall:
-    rm -f /usr/local/bin/e2fsck /usr/local/bin/resize2fs /usr/local/bin/tune2fs /usr/local/bin/pishrink /usr/local/bin/truncate
+	rm -f /usr/local/bin/e2fsck /usr/local/bin/resize2fs /usr/local/bin/tune2fs /usr/local/bin/pishrink /usr/local/bin/truncate
