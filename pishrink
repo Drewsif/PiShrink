@@ -47,8 +47,8 @@ blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':
 e2fsck -y -f "$loopback"
 minsize=$(resize2fs -P "$loopback" | cut -d ':' -f 2 | tr -d ' ')
 
-# add ~200 MB of extra space, the system may need it to run
-minsize=$(($minsize + 50000))
+# add 200 MB of extra space, the system may need it to run, minsize is in blocks unit
+minsize=$(($minsize + 200 * 1048576 / $blocksize))
 
 if [[ $minsize -gt $currentsize ]]; then
 echo "ERROR: Image already shrunk to smallest size"
