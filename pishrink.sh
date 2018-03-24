@@ -1,7 +1,9 @@
 #!/bin/bash
 
 function cleanup() {
-  [[ -n $loopback ]] && losetup -d "$loopback"
+  if losetup $loopback &>/dev/null; then
+	losetup -d "$loopback"
+  fi
 }
 
 usage() { echo "Usage: $0 [-s] imagefile.img [newimagefile.img]"; exit -1; }
