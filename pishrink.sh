@@ -2,6 +2,35 @@
 
 version="v0.1"
 
+# nice function to get user who invoked this script via sudo
+# Borrowed from http://stackoverflow.com/questions/4598001/how-do-you-find-the-original-user-through-multiple-sudo-and-su-commands
+# adapted to return current user if no sudoers is used
+
+function findUser() {
+
+	if [[ -z "$SUDO_USER" || "$SUDO_USER" == "root" ]]; then
+		echo $USER
+		return
+	fi
+
+  thisPID=$$
+  origUser=$(whoami)
+  thisUser=$origUser
+
+  while [ "$thisUser" = "$origUser" ]; do
+		if [ "$thisPID" = "0" ]; then
+			thisUser="root"
+			break
+		fi
+		ARR=($(ps h -p$thisPID -ouser,ppid;))
+		thisUser="${ARR[0]}"
+		myPPid="${ARR[1]}"
+    thisPID=$myPPid
+	done
+
+  getent passwd "$thisUser" | cut -d: -f1
+}
+
 function info() {
 	echo "$1..."
 }
@@ -13,19 +42,27 @@ function error() {
 }
 
 function cleanup() {
-  if losetup $loopback &>/dev/null; then
-	losetup -d "$loopback"
-  fi
+	if losetup $loopback &>/dev/null; then
+		losetup -d "$loopback"
+	fi
+	if [ "$debug" = true ]; then
+		# give logfile back to user
+		local user=$(findUser)
+		if [[ $user != "root" ]]; then
+			chown --reference=/home/$user "$LOGFILE"
+		fi
+	fi
+
 }
 
 function logVariables() {
 	if [ "$debug" = true ]; then
-		echo "--- Line $1" >> "$LOGFILE"
+		echo "Line $1" >> "$LOGFILE"
 		shift
 		local v var
 		for var in "$@"; do
 			eval "v=\$$var"
-			echo "--- $var: $v" >> $LOGFILE
+			echo "$var: $v" >> $LOGFILE
 		done
 	fi
 }
@@ -44,17 +81,18 @@ while getopts ":sd" opt; do
 done
 shift $((OPTIND-1))
 
-echo "${0##*/} $version"
-
 CURRENT_DIR=$(pwd)
 SCRIPTNAME="${0##*/}"
 LOGFILE=${CURRENT_DIR}/${SCRIPTNAME%.*}.log
 
 if [ "$debug" = true ]; then
 	info "Creating log file $LOGFILE"
+	rm $LOGFILE &>/dev/null
 	exec 1> >(stdbuf -i0 -o0 -e0 tee -a "$LOGFILE" >&1)
 	exec 2> >(stdbuf -i0 -o0 -e0 tee -a "$LOGFILE" >&2)
 fi
+
+echo "${0##*/} $version"
 
 #Args
 img="$1"
@@ -64,11 +102,11 @@ if [[ -z "$img" ]]; then
   usage
 fi
 if [[ ! -f "$img" ]]; then
-  echo "ERROR in $LINENO: $img is not a file..."
+  error $LINENO "$img is not a file..."
   exit -2
 fi
 if (( EUID != 0 )); then
-  echo "ERROR in $LINENO: You need to be running as root."
+  error $LINENO "You need to be running as root."
   exit -3
 fi
 
