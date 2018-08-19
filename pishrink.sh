@@ -2,35 +2,6 @@
 
 version="v0.1.1"
 
-# nice function to get user who invoked this script via sudo
-# Borrowed from http://stackoverflow.com/questions/4598001/how-do-you-find-the-original-user-through-multiple-sudo-and-su-commands
-# adapted to return current user if no sudoers is used
-
-function findUser() {
-
-	if [[ -z "$SUDO_USER" || "$SUDO_USER" == "root" ]]; then
-		echo $USER
-		return
-	fi
-
-  thisPID=$$
-  origUser=$(whoami)
-  thisUser=$origUser
-
-  while [ "$thisUser" = "$origUser" ]; do
-		if [ "$thisPID" = "0" ]; then
-			thisUser="root"
-			break
-		fi
-		ARR=($(ps h -p$thisPID -ouser,ppid;))
-		thisUser="${ARR[0]}"
-		myPPid="${ARR[1]}"
-    thisPID=$myPPid
-	done
-
-  getent passwd "$thisUser" | cut -d: -f1
-}
-
 function info() {
 	echo "$1..."
 }
@@ -46,11 +17,8 @@ function cleanup() {
 		losetup -d "$loopback"
 	fi
 	if [ "$debug" = true ]; then
-		# give logfile back to user
-		local user=$(findUser)
-		if [[ $user != "root" ]]; then
-			chown --reference=/home/$user "$LOGFILE"
-		fi
+		local old_owner=$(stat -c %u:%g "$src")
+		chown $old_owner "$LOGFILE"
 	fi
 
 }
@@ -97,6 +65,7 @@ fi
 echo "${0##*/} $version"
 
 #Args
+src="$1"
 img="$1"
 
 #Usage checks
@@ -256,8 +225,8 @@ if ! e2fsck -pf "$loopback"; then
 	if ! e2fsck -yv "$loopback"; then
 		rc=$?
 		error $LINENO "e2fsck -y failed with rc $rc. Giving up to fix corrupted filesystem."
+		exit -9
 	fi
-	exit -9
 fi
 
 if ! minsize=$(resize2fs -P "$loopback"); then
