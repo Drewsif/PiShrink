@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version="v0.1"
+version="v0.1.1"
 
 # nice function to get user who invoked this script via sudo
 # Borrowed from http://stackoverflow.com/questions/4598001/how-do-you-find-the-original-user-through-multiple-sudo-and-su-commands
@@ -67,15 +67,17 @@ function logVariables() {
 	fi
 }
 
-usage() { echo "Usage: $0 [-sd] imagefile.img [newimagefile.img]"; exit -1; }
+usage() { echo "Usage: $0 [-sdr] imagefile.img [newimagefile.img]"; exit -1; }
 
 should_skip_autoexpand=false
 debug=false
+repair=false
 
-while getopts ":sd" opt; do
+while getopts ":sdr" opt; do
   case "${opt}" in
     s) should_skip_autoexpand=true ;;
     d) debug=true;;
+    r) repair=true;;
     *) usage ;;
   esac
 done
@@ -107,6 +109,10 @@ if [[ ! -f "$img" ]]; then
 fi
 if (( EUID != 0 )); then
   error $LINENO "You need to be running as root."
+  exit -3
+fi
+if [[ -z "$2" && $repair == true ]]; then
+  error $LINENO "Option -r requires to specify newimagefile.img."
   exit -3
 fi
 
@@ -244,9 +250,13 @@ fi
 
 #Make sure filesystem is ok
 info "Checking filesystem"
-if ! e2fsck -p -f "$loopback"; then
+if ! e2fsck -pf "$loopback"; then
 	rc=$?
-	error $LINENO "fsck failed with rc $rc"
+	info "e2fsck failed with rc $rc. Filesystem is corrupt. Trying to fix filesystem"
+	if ! e2fsck -yv "$loopback"; then
+		rc=$?
+		error $LINENO "e2fsck -y failed with rc $rc. Giving up to fix corrupted filesystem."
+	fi
 	exit -9
 fi
 
