@@ -35,7 +35,7 @@ if (( EUID != 0 )); then
 fi
 
 #Check that what we need is installed
-for command in parted losetup tune2fs md5sum e2fsck resize2fs; do
+for command in parted losetup tune2fs md5sum e2fsck resize2fs rsync; do
   which $command 2>&1 >/dev/null
   if (( $? != 0 )); then
     echo "ERROR: $command is not installed."
@@ -46,7 +46,7 @@ done
 #Copy to new file if requested
 if [ -n "$2" ]; then
   echo "Copying $1 to $2..."
-  cp --reflink=auto --sparse=always "$1" "$2"
+  rsync --sparse --preallocate --info=progress2 --human-readable "$1" "$2"
   if (( $? != 0 )); then
     echo "ERROR: Could not copy file..."
     exit -5
