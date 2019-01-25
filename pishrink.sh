@@ -6,13 +6,15 @@ function cleanup() {
   fi
 }
 
-usage() { echo "Usage: $0 [-s] imagefile.img [newimagefile.img]"; exit -1; }
+usage() { echo "Usage: $0 [-s] [-z] imagefile.img [newimagefile.img]"; exit -1; }
 
 should_skip_autoexpand=false
+compress_output=false
 
-while getopts ":s" opt; do
+while getopts ":s:z" opt; do
   case "${opt}" in
     s) should_skip_autoexpand=true ;;
+    z) compress_output=true ;;
     *) usage ;;
   esac
 done
@@ -35,7 +37,7 @@ if (( EUID != 0 )); then
 fi
 
 #Check that what we need is installed
-for command in parted losetup tune2fs md5sum e2fsck resize2fs; do
+for command in parted losetup tune2fs md5sum e2fsck resize2fs tar; do
   which $command 2>&1 >/dev/null
   if (( $? != 0 )); then
     echo "ERROR: $command is not installed."
@@ -186,3 +188,11 @@ truncate -s $endresult "$img"
 aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
 
 echo "Shrunk $img from $beforesize to $aftersize"
+
+#Compress the new image
+if [ "$compress_output" = true ]; then
+  img_dir=$(dirname "$img");
+  img_filename=$(basename -- "$img");
+  echo "Compressing "
+  tar -C "$img_dir" -czvf "$img_dir/${img_filename%.*}.tar.gz" "$img_filename"
+fi
