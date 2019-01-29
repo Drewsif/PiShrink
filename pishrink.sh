@@ -82,26 +82,21 @@ if [ "$should_skip_autoexpand" = false ]; then
 cat <<\EOF1 > "$mountdir/etc/rc.local"
 #!/bin/bash
 do_expand_rootfs() {
-  ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
-
-  PART_NUM=${ROOT_PART#mmcblk0p}
-  if [ "$PART_NUM" = "$ROOT_PART" ]; then
-    echo "$ROOT_PART is not an SD card. Don't know how to expand"
-    return 0
-  fi
+  ROOT_PART=$(findmnt / -o source -n)
+  ROOT_DEV=/dev/$(lsblk -no pkname $ROOT_PART)
 
   # Get the starting offset of the root partition
-  PART_START=$(parted /dev/mmcblk0 -ms unit s p | grep "^${PART_NUM}" | cut -f 2 -d: | sed 's/[^0-9]//g')
+  PART_START=$(parted $ROOT_PART -ms unit s p | grep "^${ROOT_PART}" | cut -f 2 -d: | sed 's/[^0-9]//g')
   [ "$PART_START" ] || return 1
   # Return value will likely be error for fdisk as it fails to reload the
   # partition table because the root fs is mounted
-  fdisk /dev/mmcblk0 <<EOF
+  fdisk $ROOT_DEV <<EOF
 p
 d
-$PART_NUM
+$ROOT_PART
 n
 p
-$PART_NUM
+$ROOT_PART
 $PART_START
 
 p
@@ -110,8 +105,8 @@ EOF
 
 cat <<EOF > /etc/rc.local &&
 #!/bin/sh
-echo "Expanding /dev/$ROOT_PART"
-resize2fs /dev/$ROOT_PART
+echo "Expanding $ROOT_PART"
+resize2fs $ROOT_PART
 rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
 
 EOF
