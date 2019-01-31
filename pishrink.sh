@@ -11,7 +11,7 @@ usage() { echo "Usage: $0 [-s] [-z] imagefile.img [newimagefile.img]"; exit -1; 
 should_skip_autoexpand=false
 compress_output=false
 
-while getopts ":s:z" opt; do
+while getopts ":sz" opt; do
   case "${opt}" in
     s) should_skip_autoexpand=true ;;
     z) compress_output=true ;;
@@ -37,7 +37,7 @@ if (( EUID != 0 )); then
 fi
 
 #Check that what we need is installed
-for command in parted losetup tune2fs md5sum e2fsck resize2fs tar; do
+for command in fdisk gdisk parted losetup tune2fs md5sum e2fsck resize2fs tar; do
   which $command 2>&1 >/dev/null
   if (( $? != 0 )); then
     echo "ERROR: $command is not installed."
@@ -70,6 +70,11 @@ loopback=$(losetup -f --show -o $partstart "$img")
 tune2fs_output=$(tune2fs -l "$loopback")
 currentsize=$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)
 blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)
+
+isGPT=false
+if fdisk -l $img | grep -q "gpt"; then
+    isGPT=true
+fi
 
 #Check if we should make pi expand rootfs on next boot
 if [ "$should_skip_autoexpand" = false ]; then
@@ -179,15 +184,25 @@ sleep 1
 #Shrink partition
 partnewsize=$(($minsize * $blocksize))
 newpartend=$(($partstart + $partnewsize))
-parted -s -a minimal "$img" rm $partnum >/dev/null
-parted -s "$img" unit B mkpart primary $partstart $newpartend >/dev/null
+parted -s -a minimal "$img" rm $partnum 
+parted -s "$img" unit B mkpart primary $partstart $newpartend
 
 #Truncate the file
 endresult=$(parted -ms "$img" unit B print free | tail -1 | cut -d ':' -f 2 | tr -d 'B')
+if [ "$isGPT" = true ]; then
+    # Have to add an extra 34 Sectors for GPT type
+    endresult=$(($endresult + 34*512));
+fi
 truncate -s $endresult "$img"
 aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
-
 echo "Shrunk $img from $beforesize to $aftersize"
+
+if [ "$isGPT" = true ]; then
+    # Go fix the GPT Partition Table
+    echo "This is a GPT image, you must fix the backup partition table."
+    echo "gdisk will start, press 'w', then 'y' to fix the backup table."
+    gdisk "$img"
+fi
 
 #Compress the new image
 if [ "$compress_output" = true ]; then
