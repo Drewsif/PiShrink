@@ -2,12 +2,38 @@
 
 version="v0.1.1"
 
+CURRENT_DIR=$(pwd)
+SCRIPTNAME="${0##*/}"
+LOGFILE=${CURRENT_DIR}/${SCRIPTNAME%.*}.log
+
 function info() {
-	echo "$1..."
+	echo "$SCRIPTNAME: $1..."
+}
+
+# Returns 0 for success, <> 0 for failure
+function retry() { # command maxretry failuretest
+
+		local tries=1
+		local command="$1" # command to retry
+		local maxRetry=$2 # number of retries
+		local successtest="$3" # success test
+
+		while (( tries <= maxRetry )); do
+			info "Trying to recover corrupted filesystem. Trial $tries"
+			eval "$command"
+			rc=$?
+			eval "$successtest"
+			if (( ! $? )); then
+				info "Recovered filesystem error"
+				return 0
+			fi
+			(( tries++ ))
+		done
+		return 1
 }
 
 function error() {
-	echo -n "ERROR occured in line $1: "
+	echo -n "$SCRIPTNAME: ERROR occured in line $1: "
 	shift
 	echo "$@"
 }
@@ -35,25 +61,80 @@ function logVariables() {
 	fi
 }
 
-usage() { echo "Usage: $0 [-sdr] imagefile.img [newimagefile.img]"; exit -1; }
+function checkFilesystem() {
+
+	local stdTest="(( rc < 4 ))"
+	[[ $paranoia == true ]] && stdTest="(( rc == 0 ))"
+
+	local rc
+	info "Checking filesystem"
+	retry "e2fsck -pfttv \"$loopback\"" 3 "$stdTest"
+	rc=$?
+
+	(( ! rc )) && return
+
+	info "Filesystem error detected"
+
+	if [[ $paranoia != true ]]; then
+		error $LINENO "e2fsck failed. Filesystem corrupted. Try option -r or option -p."
+		exit -9
+	fi
+
+	info "Trying to recover corrupted filesystem (Phase1)"
+	retry "e2fsck -pftt \"$loopback\"" 3 "stdTest"
+	(( ! $? )) && return
+
+	info "Trying to recover corrupted filesystem (Phase2)."
+	retry "e2fsck -yv \"$loopback\"" 3 "$stdTest"
+	(( ! $? )) && return
+
+	info "Trying to recover corrupted filesystem (Phase3)."
+	retry "e2fsck -fttvy -b 32768 \"$loopback\"" 3 "$stdTest"
+	(( ! $? )) && return
+
+	error $LINENO "Filesystem recoveries failed. Giving up to fix corrupted filesystem."
+	exit -9
+
+}
+
+help() {
+	local help
+	read -r -d '' help << EOM
+-s: Don't expand filesystem when image is booted the first time
+-d: Write debug messages in a debug log file
+-r: Try to repair corrupted filesystem
+-p: Try to repair corrupted filesystem in paranoia mode
+EOM
+	echo $help
+	exit -1
+}
+
+usage() {
+	echo "Usage: $0 [-sdrph] imagefile.img [newimagefile.img]"
+	echo "-s: skip autoexpand"
+	echo "-d: debug mode on"
+	echo "-r: try to repair filesystem errors"
+	echo "-p: try to repair filesystem errors (paranoia mode)"
+	echo "-h: display help text"
+	exit -1
+}
 
 should_skip_autoexpand=false
 debug=false
 repair=false
+paranoia=false
 
-while getopts ":sdr" opt; do
+while getopts ":sdrph" opt; do
   case "${opt}" in
     s) should_skip_autoexpand=true ;;
     d) debug=true;;
     r) repair=true;;
+    p) paranoia=true;;
+    h) help;;
     *) usage ;;
   esac
 done
 shift $((OPTIND-1))
-
-CURRENT_DIR=$(pwd)
-SCRIPTNAME="${0##*/}"
-LOGFILE=${CURRENT_DIR}/${SCRIPTNAME%.*}.log
 
 if [ "$debug" = true ]; then
 	info "Creating log file $LOGFILE"
@@ -80,8 +161,8 @@ if (( EUID != 0 )); then
   error $LINENO "You need to be running as root."
   exit -3
 fi
-if [[ -z "$2" && $repair == true ]]; then
-  error $LINENO "Option -r requires to specify newimagefile.img."
+if [[ -z "$2" ]] && [[ $repair == true || $paranoia == true ]]; then
+  error $LINENO "Option -r and -p require to specify newimagefile.img."
   exit -3
 fi
 
@@ -113,29 +194,11 @@ trap cleanup ERR EXIT
 #Gather info
 info "Gatherin data"
 beforesize=$(ls -lh "$img" | cut -d ' ' -f 5)
-logVariables $LINENO beforesize
-if ! parted_output=$(parted -ms "$img" unit B print); then
-	rc=$?
-	error $LINENO "parted failed with rc $rc"
-	exit -6
-fi
-parted_output=$(tail -n 1 <<< $parted_output)
-logVariables $LINENO parted_output
-
+parted_output=$(parted -ms "$img" unit B print | tail -n 1)
 partnum=$(echo "$parted_output" | cut -d ':' -f 1)
 partstart=$(echo "$parted_output" | cut -d ':' -f 2 | tr -d 'B')
-logVariables $LINENO partnum partstart
-
-info "Mounting image"
-if ! loopback=$(losetup -f --show -o $partstart "$img"); then
-	rc=$?
-	error $LINENO "losetup failed with rc $rc"
-	exit -7
-fi
-if ! tune2fs_output=$(tune2fs -l "$loopback"); then
-	error $LINENO "tunefs failed"
-	exit -8
-fi
+loopback=$(losetup -f --show -o $partstart "$img")
+tune2fs_output=$(tune2fs -l "$loopback")
 currentsize=$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)
 blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)
 
@@ -218,15 +281,8 @@ else
 fi
 
 #Make sure filesystem is ok
-info "Checking filesystem"
-if ! e2fsck -pf "$loopback"; then
-	rc=$?
-	info "e2fsck failed with rc $rc. Filesystem is corrupt. Trying to fix filesystem"
-	if ! e2fsck -yv "$loopback"; then
-		rc=$?
-		error $LINENO "e2fsck -y failed with rc $rc. Giving up to fix corrupted filesystem."
-		exit -9
-	fi
+if [[ $repair == true ]]; then
+	checkFilesystem
 fi
 
 if ! minsize=$(resize2fs -P "$loopback"); then
@@ -295,6 +351,7 @@ if ! truncate -s $endresult "$img"; then
 	rc=$?
 	error $LINENO "trunate failed with rc $rc"
 	exit -16
+fi
 
 aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
 logVariables $LINENO aftersize
