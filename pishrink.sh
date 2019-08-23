@@ -261,7 +261,7 @@ if ! endresult=$(parted -ms "$img" unit B print free); then
 	exit -15
 fi
 
-endresult=$(tail -1 <<< $endresult | cut -d ':' -f 2 | tr -d 'B')
+endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
 logVariables $LINENO endresult
 if ! truncate -s $endresult "$img"; then
 	rc=$?
