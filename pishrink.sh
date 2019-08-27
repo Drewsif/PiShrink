@@ -39,12 +39,12 @@ function error() {
 }
 
 function cleanup() {
-	if losetup $loopback &>/dev/null; then
+	if losetup "$loopback" &>/dev/null; then
 		losetup -d "$loopback"
 	fi
 	if [ "$debug" = true ]; then
 		local old_owner=$(stat -c %u:%g "$src")
-		chown $old_owner "$LOGFILE"
+		chown "$old_owner" "$LOGFILE"
 	fi
 
 }
@@ -105,7 +105,7 @@ help() {
 -r: Try to repair corrupted filesystem
 -p: Try to repair corrupted filesystem in paranoia mode
 EOM
-	echo $help
+	echo "$help"
 	exit -1
 }
 
@@ -138,7 +138,7 @@ shift $((OPTIND-1))
 
 if [ "$debug" = true ]; then
 	info "Creating log file $LOGFILE"
-	rm $LOGFILE &>/dev/null
+	rm "$LOGFILE" &>/dev/null
 	exec 1> >(stdbuf -i0 -o0 -e0 tee -a "$LOGFILE" >&1)
 	exec 2> >(stdbuf -i0 -o0 -e0 tee -a "$LOGFILE" >&2)
 fi
@@ -161,14 +161,10 @@ if (( EUID != 0 )); then
   error $LINENO "You need to be running as root."
   exit -3
 fi
-if [[ -z "$2" ]] && [[ $repair == true || $paranoia == true ]]; then
-  error $LINENO "Option -r and -p require to specify newimagefile.img."
-  exit -3
-fi
 
 #Check that what we need is installed
 for command in parted losetup tune2fs md5sum e2fsck resize2fs; do
-  which $command 2>&1 >/dev/null
+  command -v $command >/dev/null 2>&1
   if (( $? != 0 )); then
     error $LINENO "$command is not installed."
     exit -4
@@ -184,7 +180,7 @@ if [ -n "$2" ]; then
     exit -5
   fi
   old_owner=$(stat -c %u:%g "$1")
-  chown $old_owner "$2"
+  chown "$old_owner" "$2"
   img="$2"
 fi
 
@@ -197,7 +193,7 @@ beforesize=$(ls -lh "$img" | cut -d ' ' -f 5)
 parted_output=$(parted -ms "$img" unit B print | tail -n 1)
 partnum=$(echo "$parted_output" | cut -d ':' -f 1)
 partstart=$(echo "$parted_output" | cut -d ':' -f 2 | tr -d 'B')
-loopback=$(losetup -f --show -o $partstart "$img")
+loopback=$(losetup -f --show -o "$partstart" "$img")
 tune2fs_output=$(tune2fs -l "$loopback")
 currentsize=$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)
 blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)
@@ -210,7 +206,7 @@ if [ "$should_skip_autoexpand" = false ]; then
   mountdir=$(mktemp -d)
   mount "$loopback" "$mountdir"
 
-  if [ $(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1) != "0542054e9ff2d2e0507ea1ffe7d4fc87" ]; then
+  if [ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "0542054e9ff2d2e0507ea1ffe7d4fc87" ]; then
     echo "Creating new /etc/rc.local"
     mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
     #####Do not touch the following lines#####
@@ -290,7 +286,7 @@ if ! minsize=$(resize2fs -P "$loopback"); then
 	error $LINENO "resize2fs failed with rc $rc"
 	exit -10
 fi
-minsize=$(cut -d ':' -f 2 <<< $minsize | tr -d ' ')
+minsize=$(cut -d ':' -f 2 <<< "$minsize" | tr -d ' ')
 logVariables $LINENO minsize
 if [[ $currentsize -eq $minsize ]]; then
   error $LINENO "Image already shrunk to smallest size"
@@ -325,13 +321,13 @@ sleep 1
 partnewsize=$(($minsize * $blocksize))
 newpartend=$(($partstart + $partnewsize))
 logVariables $LINENO partnewsize newpartend
-if ! parted -s -a minimal "$img" rm $partnum; then
+if ! parted -s -a minimal "$img" rm "$partnum"; then
 	rc=$?
 	error $LINENO "parted failed with rc $rc"
 	exit -13
 fi
 
-if ! parted -s "$img" unit B mkpart primary $partstart $newpartend; then
+if ! parted -s "$img" unit B mkpart primary "$partstart" "$newpartend"; then
 	rc=$?
 	error $LINENO "parted failed with rc $rc"
 	exit -14
@@ -347,7 +343,7 @@ fi
 
 endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
 logVariables $LINENO endresult
-if ! truncate -s $endresult "$img"; then
+if ! truncate -s "$endresult" "$img"; then
 	rc=$?
 	error $LINENO "trunate failed with rc $rc"
 	exit -16
