@@ -63,9 +63,12 @@ fi
 help() {
 	local help
 	read -r -d '' help << EOM
--s: Don't expand filesystem when image is booted the first time
--d: Write debug messages in a debug log file
--r: Use advanced repair option
+Usage: $0 [-sdrpzh] imagefile.img [newimagefile.img]
+
+  -s: Don't expand filesystem when image is booted the first time
+  -d: Write debug messages in a debug log file
+  -r: Use advanced filesystem repair option if the normal one fails
+  -z: Gzip compress image after shrinking
 EOM
 	echo "$help"
 	exit -1
@@ -73,11 +76,12 @@ EOM
 
 usage() {
 	echo "Usage: $0 [-sdrpzh] imagefile.img [newimagefile.img]"
-	echo "-s: Skip autoexpand"
-	echo "-d: Debug mode on"
-	echo "-r: Use advanced repair options"
-	echo "-z: Gzip compress image after shrinking"
-	echo "-h: display help text"
+	echo ""
+	echo "  -s: Skip autoexpand"
+	echo "  -d: Debug mode on"
+	echo "  -r: Use advanced repair options"
+	echo "  -z: Gzip compress image after shrinking"
+	echo "  -h: display help text"
 	exit -1
 }
 
