@@ -72,10 +72,11 @@ EOM
 }
 
 usage() {
-	echo "Usage: $0 [-sdrph] imagefile.img [newimagefile.img]"
+	echo "Usage: $0 [-sdrpzh] imagefile.img [newimagefile.img]"
 	echo "-s: Skip autoexpand"
 	echo "-d: Debug mode on"
 	echo "-r: Use advanced repair options"
+	echo "-z: Gzip compress image after shrinking"
 	echo "-h: display help text"
 	exit -1
 }
@@ -83,12 +84,14 @@ usage() {
 should_skip_autoexpand=false
 debug=false
 repair=false
+gzip_compress=false
 
-while getopts ":sdrh" opt; do
+while getopts ":sdrzh" opt; do
   case "${opt}" in
     s) should_skip_autoexpand=true ;;
     d) debug=true;;
     r) repair=true;;
+    z) gzip_compress=true;;
     h) help;;
     *) usage ;;
   esac
@@ -304,6 +307,13 @@ if ! truncate -s "$endresult" "$img"; then
 	rc=$?
 	error $LINENO "trunate failed with rc $rc"
 	exit -16
+fi
+
+if [[ $gzip_compress == true ]]; then
+    info "Gzipping the shrunk image"
+    if [[ ! $(gzip -f9 "$img") ]]; then
+        img=$img.gz
+    fi
 fi
 
 aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
