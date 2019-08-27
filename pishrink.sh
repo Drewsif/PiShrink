@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version="v0.1.1"
+version="v0.1.2"
 
 CURRENT_DIR=$(pwd)
 SCRIPTNAME="${0##*/}"
@@ -8,28 +8,6 @@ LOGFILE=${CURRENT_DIR}/${SCRIPTNAME%.*}.log
 
 function info() {
 	echo "$SCRIPTNAME: $1..."
-}
-
-# Returns 0 for success, <> 0 for failure
-function retry() { # command maxretry failuretest
-
-		local tries=1
-		local command="$1" # command to retry
-		local maxRetry=$2 # number of retries
-		local successtest="$3" # success test
-
-		while (( tries <= maxRetry )); do
-			info "Trying to recover corrupted filesystem. Trial $tries"
-			eval "$command"
-			rc=$?
-			eval "$successtest"
-			if (( ! $? )); then
-				info "Recovered filesystem error"
-				return 0
-			fi
-			(( tries++ ))
-		done
-		return 1
 }
 
 function error() {
@@ -56,43 +34,28 @@ function logVariables() {
 		local v var
 		for var in "$@"; do
 			eval "v=\$$var"
-			echo "$var: $v" >> $LOGFILE
+			echo "$var: $v" >> "$LOGFILE"
 		done
 	fi
 }
 
 function checkFilesystem() {
-
-	local stdTest="(( rc < 4 ))"
-	[[ $paranoia == true ]] && stdTest="(( rc == 0 ))"
-
-	local rc
 	info "Checking filesystem"
-	retry "e2fsck -pfttv \"$loopback\"" 3 "$stdTest"
-	rc=$?
+	e2fsck -pf "$loopback"
+	(( $? < 4 )) && return
 
-	(( ! rc )) && return
+	info "Filesystem error detected!"
 
-	info "Filesystem error detected"
+	info "Trying to recover corrupted filesystem"
+	e2fsck -y "$loopback"
+	(( $? < 4 )) && return
 
-	if [[ $paranoia != true ]]; then
-		error $LINENO "e2fsck failed. Filesystem corrupted. Try option -r or option -p."
-		exit -9
-	fi
-
-	info "Trying to recover corrupted filesystem (Phase1)"
-	retry "e2fsck -pftt \"$loopback\"" 3 "stdTest"
-	(( ! $? )) && return
-
-	info "Trying to recover corrupted filesystem (Phase2)."
-	retry "e2fsck -yv \"$loopback\"" 3 "$stdTest"
-	(( ! $? )) && return
-
-	info "Trying to recover corrupted filesystem (Phase3)."
-	retry "e2fsck -fttvy -b 32768 \"$loopback\"" 3 "$stdTest"
-	(( ! $? )) && return
-
-	error $LINENO "Filesystem recoveries failed. Giving up to fix corrupted filesystem."
+if [[ $repair == true ]]; then
+	info "Trying to recover corrupted filesystem - Phase 2"
+	e2fsck -fy -b 32768 "$loopback"
+	(( $? < 4 )) && return
+fi
+	error $LINENO "Filesystem recoveries failed. Giving up..."
 	exit -9
 
 }
@@ -102,8 +65,7 @@ help() {
 	read -r -d '' help << EOM
 -s: Don't expand filesystem when image is booted the first time
 -d: Write debug messages in a debug log file
--r: Try to repair corrupted filesystem
--p: Try to repair corrupted filesystem in paranoia mode
+-r: Use advanced repair option
 EOM
 	echo "$help"
 	exit -1
@@ -111,10 +73,9 @@ EOM
 
 usage() {
 	echo "Usage: $0 [-sdrph] imagefile.img [newimagefile.img]"
-	echo "-s: skip autoexpand"
-	echo "-d: debug mode on"
-	echo "-r: try to repair filesystem errors"
-	echo "-p: try to repair filesystem errors (paranoia mode)"
+	echo "-s: Skip autoexpand"
+	echo "-d: Debug mode on"
+	echo "-r: Use advanced repair options"
 	echo "-h: display help text"
 	exit -1
 }
@@ -122,14 +83,12 @@ usage() {
 should_skip_autoexpand=false
 debug=false
 repair=false
-paranoia=false
 
-while getopts ":sdrph" opt; do
+while getopts ":sdrh" opt; do
   case "${opt}" in
     s) should_skip_autoexpand=true ;;
     d) debug=true;;
     r) repair=true;;
-    p) paranoia=true;;
     h) help;;
     *) usage ;;
   esac
@@ -277,9 +236,7 @@ else
 fi
 
 #Make sure filesystem is ok
-if [[ $repair == true ]]; then
-	checkFilesystem
-fi
+checkFilesystem
 
 if ! minsize=$(resize2fs -P "$loopback"); then
 	rc=$?
