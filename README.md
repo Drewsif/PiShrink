@@ -29,12 +29,11 @@ If using Ubuntu, you will likely see an error about `e2fsck` being out of date a
 ```bash
 wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
 chmod +x pishrink.sh
-sudo mv pishrink.sh /usr/local/bin
 ```
 
 ## Example ##
 ```bash
-[user@localhost PiShrink]$ sudo pishrink.sh pi.img
+[user@localhost PiShrink]$ sudo ./pishrink.sh pi.img
 e2fsck 1.42.9 (28-Dec-2013)
 Pass 1: Checking inodes, blocks, and sizes
 Pass 2: Checking directory structure
