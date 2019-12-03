@@ -63,7 +63,7 @@ fi
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-sdrpzh] imagefile.img [newimagefile.img]
+Usage: $0 [-sdrzh] imagefile.img [newimagefile.img]
 
   -s: Don't expand filesystem when image is booted the first time
   -d: Write debug messages in a debug log file
