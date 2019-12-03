@@ -4,7 +4,7 @@ PiShrink is a bash script that automatically shrink a pi image that will then re
 
 ## Usage ##
 ```
-sudo pishrink.sh [-sdrpzh] imagefile.img [newimagefile.img]
+sudo pishrink.sh [-sdrzh] imagefile.img [newimagefile.img]
   -s: Skip autoexpand
   -d: Debug mode on
   -r: Use advanced repair options
