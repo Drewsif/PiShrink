@@ -154,6 +154,8 @@ fi
 trap cleanup ERR EXIT
 
 #Gather info
+export LANG=en_US.UTF-8
+export LANGUAGE=en_US.UTF-8
 info "Gatherin data"
 beforesize=$(ls -lh "$img" | cut -d ' ' -f 5)
 parted_output=$(parted -ms "$img" unit B print | tail -n 1)
