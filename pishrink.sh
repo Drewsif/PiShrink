@@ -63,11 +63,12 @@ fi
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-sdrzh] imagefile.img [newimagefile.img]
+Usage: $0 [-sdrpzh] imagefile.img [newimagefile.img]
 
   -s: Don't expand filesystem when image is booted the first time
   -d: Write debug messages in a debug log file
   -r: Use advanced filesystem repair option if the normal one fails
+  -p: Remove logs, apt archives, dhcp leases and ssh hostkeys
   -z: Gzip compress image after shrinking
 EOM
 	echo "$help"
@@ -80,6 +81,7 @@ usage() {
 	echo "  -s: Skip autoexpand"
 	echo "  -d: Debug mode on"
 	echo "  -r: Use advanced repair options"
+	echo "  -p: Remove logs, apt archives, dhcp leases and ssh hostkeys"
 	echo "  -z: Gzip compress image after shrinking"
 	echo "  -h: display help text"
 	exit -1
@@ -89,12 +91,14 @@ should_skip_autoexpand=false
 debug=false
 repair=false
 gzip_compress=false
+prep=false
 
-while getopts ":sdrzh" opt; do
+while getopts ":sdrpzh" opt; do
   case "${opt}" in
     s) should_skip_autoexpand=true ;;
     d) debug=true;;
     r) repair=true;;
+    p) prep=true;;
     z) gzip_compress=true;;
     h) help;;
     *) usage ;;
@@ -154,7 +158,7 @@ fi
 trap cleanup ERR EXIT
 
 #Gather info
-info "Gatherin data"
+info "Gathering data"
 beforesize=$(ls -lh "$img" | cut -d ' ' -f 5)
 parted_output=$(parted -ms "$img" unit B print | tail -n 1)
 partnum=$(echo "$parted_output" | cut -d ':' -f 1)
@@ -241,6 +245,15 @@ EOF1
 else
   echo "Skipping autoexpanding process..."
 fi
+
+if [[ $prep == true ]]; then
+  info "Syspreping: Removing logs, apt archives, dhcp leases and ssh hostkeys"
+  mountdir=$(mktemp -d)
+  mount "$loopback" "$mountdir"
+  rm -rf "$mountdir/var/cache/apt/archives/*" "$mountdir/var/lib/dhcpcd5/*" "$mountdir/var/log/*" "$mountdir/var/tmp/*" "$mountdir/tmp/*" "$mountdir/etc/ssh/*_host_*" 
+  umount "$mountdir"
+fi
+
 
 #Make sure filesystem is ok
 checkFilesystem
