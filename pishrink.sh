@@ -159,16 +159,16 @@ trap cleanup ERR EXIT
 
 #Gather info
 info "Gathering data"
-beforesize=$(ls -lh "$img" | cut -d ' ' -f 5)
-parted_output=$(parted -ms "$img" unit B print | tail -n 1)
-partnum=$(echo "$parted_output" | cut -d ':' -f 1)
-partstart=$(echo "$parted_output" | cut -d ':' -f 2 | tr -d 'B')
-loopback=$(losetup -f --show -o "$partstart" "$img")
-tune2fs_output=$(tune2fs -l "$loopback")
-currentsize=$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)
-blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)
+beforesize="$(ls -lh "$img" | cut -d ' ' -f 5)"
+parted_output="$(parted -ms "$img" unit B print | tail -n 1)"
+partnum="$(echo "$parted_output" | cut -d ':' -f 1)"
+partstart="$(echo "$parted_output" | cut -d ':' -f 2 | tr -d 'B')"
+loopback="$(losetup -f --show -o "$partstart" "$img")"
+tune2fs_output="$(tune2fs -l "$loopback")"
+currentsize="$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)"
+blocksize="$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)"
 
-logVariables $LINENO tune2fs_output currentsize blocksize
+logVariables $LINENO beforesize parted_output partnum partstart tune2fs_output currentsize blocksize
 
 #Check if we should make pi expand rootfs on next boot
 if [ "$should_skip_autoexpand" = false ]; then
@@ -250,7 +250,7 @@ if [[ $prep == true ]]; then
   info "Syspreping: Removing logs, apt archives, dhcp leases and ssh hostkeys"
   mountdir=$(mktemp -d)
   mount "$loopback" "$mountdir"
-  rm -rf "$mountdir/var/cache/apt/archives/*" "$mountdir/var/lib/dhcpcd5/*" "$mountdir/var/log/*" "$mountdir/var/tmp/*" "$mountdir/tmp/*" "$mountdir/etc/ssh/*_host_*" 
+  rm -rf "$mountdir/var/cache/apt/archives/*" "$mountdir/var/lib/dhcpcd5/*" "$mountdir/var/log/*" "$mountdir/var/tmp/*" "$mountdir/tmp/*" "$mountdir/etc/ssh/*_host_*"
   umount "$mountdir"
 fi
 
@@ -264,7 +264,7 @@ if ! minsize=$(resize2fs -P "$loopback"); then
 	exit -10
 fi
 minsize=$(cut -d ':' -f 2 <<< "$minsize" | tr -d ' ')
-logVariables $LINENO minsize
+logVariables $LINENO currentsize minsize
 if [[ $currentsize -eq $minsize ]]; then
   error $LINENO "Image already shrunk to smallest size"
   exit -11
