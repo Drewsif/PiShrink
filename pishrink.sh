@@ -69,7 +69,7 @@ Usage: $0 [-sdrpzxh] imagefile.img [newimagefile.img]
   -d: Write debug messages in a debug log file
   -r: Use advanced filesystem repair option if the normal one fails
   -p: Remove logs, apt archives, dhcp leases and ssh hostkeys
-  -z: Gzip compress image after shrinking
+  -z: Gzip compress image after shrinking (uses pigz if available)
   -x: xz compress image after shrinking
 EOM
 	echo "$help"
@@ -83,7 +83,7 @@ usage() {
 	echo "  -d: Debug mode on"
 	echo "  -r: Use advanced repair options"
 	echo "  -p: Remove logs, apt archives, dhcp leases and ssh hostkeys"
-	echo "  -z: Gzip compress image after shrinking"
+	echo "  -z: Gzip compress image after shrinking (uses pigz if available)"
 	echo "  -x: xz compress image after shrinking"
 	echo "  -h: display help text"
 	exit -1
@@ -254,7 +254,7 @@ if [[ $prep == true ]]; then
   info "Syspreping: Removing logs, apt archives, dhcp leases and ssh hostkeys"
   mountdir=$(mktemp -d)
   mount "$loopback" "$mountdir"
-  rm -rf "$mountdir/var/cache/apt/archives/*" "$mountdir/var/lib/dhcpcd5/*" "$mountdir/var/log/*" "$mountdir/var/tmp/*" "$mountdir/tmp/*" "$mountdir/etc/ssh/*_host_*" 
+  rm -rf "$mountdir/var/cache/apt/archives/*" "$mountdir/var/lib/dhcpcd5/*" "$mountdir/var/log/*" "$mountdir/var/tmp/*" "$mountdir/tmp/*" "$mountdir/etc/ssh/*_host_*"
   umount "$mountdir"
 fi
 
@@ -330,16 +330,22 @@ if ! truncate -s "$endresult" "$img"; then
 	exit -16
 fi
 
+# https://stackoverflow.com/a/53798785
+function is_bin_in_path {
+  builtin type -P "$1" &> /dev/null
+}
+
 if [[ $gzip_compress == true ]]; then
     info "Gzipping the shrunk image"
-    if [[ ! $(gzip -f9 "$img") ]]; then
+    is_bin_in_path pigz && prg='pigz' || prg='gzip'
+    if [[ ! $($prg -f9 "$img") ]]; then
         img="$img".gz
     fi
 fi
 
 if [[ $xz_compress == true ]]; then
     info "compressing the shrunk image with xz"
-    if [[ ! $(xz -v -9 "$img") ]]; then
+    if [[ ! $(xz -v -T0 -9 "$img") ]]; then
         img="$img".xz
     fi
 fi
