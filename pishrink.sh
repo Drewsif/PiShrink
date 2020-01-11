@@ -5,6 +5,10 @@ version="v0.1.2"
 CURRENT_DIR=$(pwd)
 SCRIPTNAME="${0##*/}"
 LOGFILE=${CURRENT_DIR}/${SCRIPTNAME%.*}.log
+REQUIRED_TOOLS="parted losetup tune2fs md5sum e2fsck resize2fs"
+ZIPTOOLS=("gzip pigz xz pxz")
+declare -A ZIPOPTIONS=( [gzip]="-f9" [pigz]="-9" [xz]="-9" [pxz]="-9") # options for zip tools
+declare -A ZIPEXTENSIONS=( [gzip]="gz" [pigz]="gz" [xz]="xz" [pxz]="xz") # extensions of zipped files
 
 function info() {
 	echo "$SCRIPTNAME: $1..."
@@ -63,45 +67,36 @@ fi
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-sdrpzh] imagefile.img [newimagefile.img]
+Usage: $0 [-sdirpzh] imagefile.img [newimagefile.img]
 
-  -s: Don't expand filesystem when image is booted the first time
-  -d: Write debug messages in a debug log file
-  -r: Use advanced filesystem repair option if the normal one fails
-  -p: Remove logs, apt archives, dhcp leases and ssh hostkeys
-  -z: Gzip compress image after shrinking
+  -s         Don't expand filesystem when image is booted the first time
+  -d         Write debug messages in a debug log file
+  -i TOOL    Zip tool to use to compress image. TOOLS can be one of $ZIPTOOLS (Default: gzip)
+  -r         Use advanced filesystem repair option if the normal one fails
+  -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
+  -z         Compress image after shrinking
 EOM
 	echo "$help"
-	exit -1
-}
-
-usage() {
-	echo "Usage: $0 [-sdrpzh] imagefile.img [newimagefile.img]"
-	echo ""
-	echo "  -s: Skip autoexpand"
-	echo "  -d: Debug mode on"
-	echo "  -r: Use advanced repair options"
-	echo "  -p: Remove logs, apt archives, dhcp leases and ssh hostkeys"
-	echo "  -z: Gzip compress image after shrinking"
-	echo "  -h: display help text"
 	exit -1
 }
 
 should_skip_autoexpand=false
 debug=false
 repair=false
-gzip_compress=false
+compress=false
 prep=false
+ziptool="gzip"
+required_tools="$REQUIRED_TOOLS"
 
-while getopts ":sdrpzh" opt; do
+while getopts ":si:drpzh" opt; do
   case "${opt}" in
     s) should_skip_autoexpand=true ;;
     d) debug=true;;
     r) repair=true;;
     p) prep=true;;
-    z) gzip_compress=true;;
-    h) help;;
-    *) usage ;;
+    z) compress=true;;
+    i) ziptool="$OPTARG";;
+    h,*) help;;
   esac
 done
 shift $((OPTIND-1))
@@ -121,8 +116,9 @@ img="$1"
 
 #Usage checks
 if [[ -z "$img" ]]; then
-  usage
+  help
 fi
+
 if [[ ! -f "$img" ]]; then
   error $LINENO "$img is not a file..."
   exit -2
@@ -132,8 +128,18 @@ if (( EUID != 0 )); then
   exit -3
 fi
 
+# check selected compression tool is supported and installed
+if [[ $compress == true ]]; then
+	if [[ ! " ${ZIPTOOLS[@]} " =~ " $ziptool " ]]; then
+		error $LINENO "$ziptool is an unsupported ziptool."
+		exit -17
+	else
+		REQUIRED_TOOLS="$REQUIRED_TOOLS $ziptool"
+	fi
+fi
+
 #Check that what we need is installed
-for command in parted losetup tune2fs md5sum e2fsck resize2fs; do
+for command in $REQUIRED_TOOLS; do
   command -v $command >/dev/null 2>&1
   if (( $? != 0 )); then
     error $LINENO "$command is not installed."
@@ -326,10 +332,10 @@ if ! truncate -s "$endresult" "$img"; then
 	exit -16
 fi
 
-if [[ $gzip_compress == true ]]; then
-    info "Gzipping the shrunk image"
-    if [[ ! $(gzip -f9 "$img") ]]; then
-        img=$img.gz
+if [[ $compress == true ]]; then
+    info "Using $ziptool on the shrunk image using options ${ZIPOPTIONS[$ziptool]}"
+    if [[ ! $($ziptool ${ZIPOPTIONS[$ziptool]} "$img") ]]; then
+        img=$img.${ZIPEXTENSIONS[$ziptool]}
     fi
 fi
 
