@@ -5,7 +5,7 @@ In addition the shrinked image can be compressed with gzip, pigz, xz or pxz to c
 
 ## Usage ##
 ```
-sudo pishrink.sh [-sdrzh] imagefile.img [newimagefile.img]
+sudo pishrink.sh [-sdirzh] imagefile.img [newimagefile.img]
   -s: Skip autoexpand
   -i TOOL: Zip tool to use to compress image. TOOLS can be one of gzip pigz xz pxz (Default: gzip)
   -d: Debug mode on
