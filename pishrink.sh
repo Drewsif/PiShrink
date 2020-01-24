@@ -69,6 +69,8 @@ Usage: $0 [-sdrpzh] imagefile.img [newimagefile.img]
   -d: Write debug messages in a debug log file
   -r: Use advanced filesystem repair option if the normal one fails
   -p: Remove logs, apt archives, dhcp leases and ssh hostkeys
+  -x: XZ compress image after shrinking
+  -e: XZ extreme compress image after shrinking
   -z: Gzip compress image after shrinking
 EOM
 	echo "$help"
@@ -82,6 +84,8 @@ usage() {
 	echo "  -d: Debug mode on"
 	echo "  -r: Use advanced repair options"
 	echo "  -p: Remove logs, apt archives, dhcp leases and ssh hostkeys"
+	echo "  -x: XZ compress image after shrinking"
+	echo "  -e: XZ extreme compress image after shrinking"
 	echo "  -z: Gzip compress image after shrinking"
 	echo "  -h: display help text"
 	exit -1
@@ -90,6 +94,8 @@ usage() {
 should_skip_autoexpand=false
 debug=false
 repair=false
+xzip_compress=false
+exzip_compress=false
 gzip_compress=false
 prep=false
 
@@ -99,6 +105,8 @@ while getopts ":sdrpzh" opt; do
     d) debug=true;;
     r) repair=true;;
     p) prep=true;;
+    x) xzip_compress=true;;
+    e) exzip_compress=true;;
     z) gzip_compress=true;;
     h) help;;
     *) usage ;;
@@ -115,11 +123,11 @@ fi
 
 echo "${0##*/} $version"
 
-#Args
+# Args
 src="$1"
 img="$1"
 
-#Usage checks
+# Usage checks
 if [[ -z "$img" ]]; then
   usage
 fi
@@ -132,7 +140,7 @@ if (( EUID != 0 )); then
   exit -3
 fi
 
-#Check that what we need is installed
+# Check that what we need is installed
 for command in parted losetup tune2fs md5sum e2fsck resize2fs; do
   command -v $command >/dev/null 2>&1
   if (( $? != 0 )); then
@@ -141,7 +149,7 @@ for command in parted losetup tune2fs md5sum e2fsck resize2fs; do
   fi
 done
 
-#Copy to new file if requested
+# Copy to new file if requested
 if [ -n "$2" ]; then
   info "Copying $1 to $2..."
   cp --reflink=auto --sparse=always "$1" "$2"
@@ -154,7 +162,7 @@ if [ -n "$2" ]; then
   img="$2"
 fi
 
-# cleanup at script exit
+# Cleanup at script exit
 trap cleanup ERR EXIT
 
 #Gather info
@@ -170,7 +178,7 @@ blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':
 
 logVariables $LINENO tune2fs_output currentsize blocksize
 
-#Check if we should make pi expand rootfs on next boot
+# Check if we should make pi expand rootfs on next boot
 if [ "$should_skip_autoexpand" = false ]; then
   #Make pi expand rootfs on next boot
   mountdir=$(mktemp -d)
@@ -254,8 +262,7 @@ if [[ $prep == true ]]; then
   umount "$mountdir"
 fi
 
-
-#Make sure filesystem is ok
+# Make sure filesystem is ok
 checkFilesystem
 
 if ! minsize=$(resize2fs -P "$loopback"); then
@@ -270,7 +277,7 @@ if [[ $currentsize -eq $minsize ]]; then
   exit -11
 fi
 
-#Add some free space to the end of the filesystem
+# Add some free space to the end of the filesystem
 extra_space=$(($currentsize - $minsize))
 logVariables $LINENO extra_space
 for space in 5000 1000 100; do
@@ -281,7 +288,7 @@ for space in 5000 1000 100; do
 done
 logVariables $LINENO minsize
 
-#Shrink filesystem
+# Shrink filesystem
 info "Shrinking filesystem"
 resize2fs -p "$loopback" $minsize
 if [[ $? != 0 ]]; then
@@ -294,7 +301,7 @@ if [[ $? != 0 ]]; then
 fi
 sleep 1
 
-#Shrink partition
+# Shrink partition
 partnewsize=$(($minsize * $blocksize))
 newpartend=$(($partstart + $partnewsize))
 logVariables $LINENO partnewsize newpartend
@@ -310,7 +317,7 @@ if ! parted -s "$img" unit B mkpart primary "$partstart" "$newpartend"; then
 	exit -14
 fi
 
-#Truncate the file
+# Truncate the file
 info "Shrinking image"
 if ! endresult=$(parted -ms "$img" unit B print free); then
 	rc=$?
@@ -324,6 +331,20 @@ if ! truncate -s "$endresult" "$img"; then
 	rc=$?
 	error $LINENO "trunate failed with rc $rc"
 	exit -16
+fi
+
+if [[ $xzip_compress == true ]]; then
+    info "XZipping the shrunk image"
+    if [[ ! $(xz -9v "$img") ]]; then
+        img=$img.xz
+    fi
+fi
+
+if [[ $exzip_compress == true ]]; then
+    info "Extreme XZipping the shrunk image"
+    if [[ ! $(xz -9ve "$img") ]]; then
+        img=$img.xz
+    fi
 fi
 
 if [[ $gzip_compress == true ]]; then
