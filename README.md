@@ -23,7 +23,8 @@ If you specify the `newimagefile.img` parameter, the script will make a copy of 
 * `-s` will skip the autoexpanding part of the process.
 * `-d` will create a logfile `pishrink.log` which may help for problem analysis.
 * `-r` will attempt to repair the filesystem if regular repairs fail
-* `-z` will compress the image after shrinking using gzip or xz. Default is `gzip`. `.gz` or `.xz` extension will be added to the filename.
+* `-z` will compress the image after shrinking using gzip. `.gz` extension will be added to the filename.
+* `-Z` will compress the image after shrinking using xz. `.xz` extension will be added to the filename.
 * `-a` will use option -f9 for pigz and option -T0 for xz.
 
 Default options for parallel compression can be overwritten by defining PISHRINK_GZIP or PSHRINK_XZ environment variables.
