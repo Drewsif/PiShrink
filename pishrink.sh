@@ -2,16 +2,17 @@
 
 version="v0.1.2"
 
-CURRENT_DIR=$(pwd)
+CURRENT_DIR="$(pwd)"
 SCRIPTNAME="${0##*/}"
-LOGFILE=${CURRENT_DIR}/${SCRIPTNAME%.*}.log
+MYNAME="${SCRIPTNAME%.*}"
+LOGFILE="${CURRENT_DIR}/${SCRIPTNAME%.*}.log"
 REQUIRED_TOOLS="parted losetup tune2fs md5sum e2fsck resize2fs"
-ZIPTOOLS=("gzip pigz xz pxz")
-declare -A ZIPOPTIONS=( [gzip]="-f9" [pigz]="-9" [xz]="-9" [pxz]="-9") # options for zip tools
-declare -A ZIPEXTENSIONS=( [gzip]="gz" [pigz]="gz" [xz]="xz" [pxz]="xz") # extensions of zipped files
+ZIPTOOLS=("gzip xz")
+declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f9" [xz]="-T0" ) # options for zip tools in parallel mode
+declare -A ZIPEXTENSIONS=( [gzip]="gz" [xz]="xz" ) # extensions of zipped files
 
 function info() {
-	echo "$SCRIPTNAME: $1..."
+	echo "$SCRIPTNAME: $1 ..."
 }
 
 function error() {
@@ -67,14 +68,16 @@ fi
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-sdirpzh] imagefile.img [newimagefile.img]
+Usage: $0 [-sdiarpzvh] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
   -d         Write debug messages in a debug log file
-  -i TOOL    Zip tool to use to compress image. TOOLS can be one of $ZIPTOOLS (Default: gzip)
   -r         Use advanced filesystem repair option if the normal one fails
   -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
+  -v			 Be verbose
   -z         Compress image after shrinking
+  -i TOOL    Zip tool to use to compress image. TOOLS can be one of $ZIPTOOLS (Default: gzip)
+  -a         Use parallel compress feature of compression tool
 EOM
 	echo "$help"
 	exit -1
@@ -84,19 +87,24 @@ should_skip_autoexpand=false
 debug=false
 repair=false
 compress=false
+parallel=false
+verbose=false
 prep=false
 ziptool="gzip"
 required_tools="$REQUIRED_TOOLS"
 
-while getopts ":si:drpzh" opt; do
+while getopts ":adhipr:svz" opt; do
   case "${opt}" in
-    s) should_skip_autoexpand=true ;;
+    a) parallel=true;;
     d) debug=true;;
-    r) repair=true;;
-    p) prep=true;;
-    z) compress=true;;
+    h) help;;
     i) ziptool="$OPTARG";;
-    h,*) help;;
+    p) prep=true;;
+    r) repair=true;;
+    s) should_skip_autoexpand=true ;;
+    z) compress=true;;
+    v) verbose=true;;
+    *) help;;
   esac
 done
 shift $((OPTIND-1))
@@ -175,7 +183,6 @@ currentsize="$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -
 blocksize="$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)"
 
 logVariables $LINENO beforesize parted_output partnum partstart tune2fs_output currentsize blocksize
-
 #Check if we should make pi expand rootfs on next boot
 if [ "$should_skip_autoexpand" = false ]; then
   #Make pi expand rootfs on next boot
@@ -186,6 +193,7 @@ if [ "$should_skip_autoexpand" = false ]; then
     echo "Creating new /etc/rc.local"
     mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
     #####Do not touch the following lines#####
+
 cat <<\EOF1 > "$mountdir/etc/rc.local"
 #!/bin/bash
 do_expand_rootfs() {
@@ -333,10 +341,29 @@ if ! truncate -s "$endresult" "$img"; then
 fi
 
 if [[ $compress == true ]]; then
-    info "Using $ziptool on the shrunk image using options ${ZIPOPTIONS[$ziptool]}"
-    if [[ ! $($ziptool ${ZIPOPTIONS[$ziptool]} "$img") ]]; then
-        img=$img.${ZIPEXTENSIONS[$ziptool]}
-    fi
+	options=""
+	envVarname="${MYNAME^^}_${ziptool^^}"
+	if [[ $parallel == true ]]; then
+		options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
+		[[ -v $envVarname ]] && options="${!envVarname}"
+		[[ $verbose == true ]] && options="$options -v"
+		info "Using $ziptool on the shrunk image using options ${options}"
+		if ! $ziptool ${options} "$img"; then
+			rc=$?
+			error $LINENO "$ziptool failed with rc $rc"
+			exit -18
+		fi
+	else # sequential
+		info "Using $ziptool on the shrunk image"
+		[[ -v $envVarname ]] && options="${!envVarname}"
+		[[ $verbose == true ]] && options="$options -v"
+		if ! $ziptool ${options} $img; then
+			rc=$?
+			error $LINENO "$ziptool failed with rc $rc"
+			exit -19
+		fi
+	fi
+	img=$img.${ZIPEXTENSIONS[$ziptool]}
 fi
 
 aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)

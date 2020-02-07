@@ -6,12 +6,14 @@ In addition the shrinked image can be compressed with gzip, pigz, xz or pxz to c
 ## Usage ##
 ```
 sudo pishrink.sh [-sdirzh] imagefile.img [newimagefile.img]
-  -s: Skip autoexpand
-  -i TOOL: Zip tool to use to compress image. TOOLS can be one of gzip pigz xz pxz (Default: gzip)
-  -d: Debug mode on
-  -r: Use advanced repair options
-  -z: Compress image after shrinking
-  -h: display help text
+  -s         Don't expand filesystem when image is booted the first time
+  -d         Write debug messages in a debug log file
+  -r         Use advanced filesystem repair option if the normal one fails
+  -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
+  -v		 Be verbose
+  -z         Compress image after shrinking
+  -i TOOL    Zip tool to use to compress image. TOOLS can be one of $ZIPTOOLS (Default: gzip)
+  -a         Use parallel compress feature of compression tool
 ```
 
 If you specify the `newimagefile.img` parameter, the script will make a copy of `imagefile.img` and work off that. You will need enough space to make a full copy of the image to use that option.
@@ -19,7 +21,10 @@ If you specify the `newimagefile.img` parameter, the script will make a copy of 
 * `-s` will skip the autoexpanding part of the process.
 * `-d` will create a logfile `pishrink.log` which may help for problem analysis.
 * `-r` will attempt to repair the filesystem if regular repairs fail
-* `-z` will compress the image after shrinking using gzip, pigz, xz or pxz. Default is `gzip`. `.gz` or `.xz` extension will be added to the filename.
+* `-z` will compress the image after shrinking using gzip or xz. Default is `gzip`. `.gz` or `.xz` extension will be added to the filename.
+* `-a` will use option -f9 for gzip and option -T0 for xz.
+
+Default options for parallel compression can be overwritten by defining PISHRINK_GZIP or PSHRINK_XZ environment variable.
 
 ## Prerequisites ##
 If you are trying to shrink a [NOOBS](https://github.com/raspberrypi/noobs) image it will likely fail. This is due to [NOOBS partitioning](https://github.com/raspberrypi/noobs/wiki/NOOBS-partitioning-explained) being significantly different than Raspbian's. Hopefully PiShrink will be able to support NOOBS in the near future.
