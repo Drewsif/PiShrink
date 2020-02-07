@@ -8,6 +8,7 @@ MYNAME="${SCRIPTNAME%.*}"
 LOGFILE="${CURRENT_DIR}/${SCRIPTNAME%.*}.log"
 REQUIRED_TOOLS="parted losetup tune2fs md5sum e2fsck resize2fs"
 ZIPTOOLS=("gzip xz")
+declare -A ZIP_PARALLEL_TOOL=( [gzip]="pigz" [xz]="xz" ) # parallel zip tool to use in parallel mode
 declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f9" [xz]="-T0" ) # options for zip tools in parallel mode
 declare -A ZIPEXTENSIONS=( [gzip]="gz" [xz]="xz" ) # extensions of zipped files
 
@@ -68,16 +69,16 @@ fi
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-sdiarpzvh] imagefile.img [newimagefile.img]
+Usage: $0 [-sdarpzZvh] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
   -d         Write debug messages in a debug log file
   -r         Use advanced filesystem repair option if the normal one fails
   -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
   -v			 Be verbose
-  -z         Compress image after shrinking
-  -i TOOL    Zip tool to use to compress image. TOOLS can be one of $ZIPTOOLS (Default: gzip)
-  -a         Use parallel compress feature of compression tool
+  -z         Compress image after shrinking with gzip
+  -Z         Compress image after shrinking with xz
+  -a         Compress image in parallel using multiple cores
 EOM
 	echo "$help"
 	exit -1
@@ -86,11 +87,10 @@ EOM
 should_skip_autoexpand=false
 debug=false
 repair=false
-compress=false
 parallel=false
 verbose=false
 prep=false
-ziptool="gzip"
+ziptool=""
 required_tools="$REQUIRED_TOOLS"
 
 while getopts ":adhipr:svz" opt; do
@@ -98,11 +98,11 @@ while getopts ":adhipr:svz" opt; do
     a) parallel=true;;
     d) debug=true;;
     h) help;;
-    i) ziptool="$OPTARG";;
     p) prep=true;;
     r) repair=true;;
     s) should_skip_autoexpand=true ;;
-    z) compress=true;;
+    z) ziptool="gzip";;
+    Z) ziptool="xz";;
     v) verbose=true;;
     *) help;;
   esac
@@ -137,12 +137,16 @@ if (( EUID != 0 )); then
 fi
 
 # check selected compression tool is supported and installed
-if [[ $compress == true ]]; then
+if [[ -n $ziptool ]]; then
 	if [[ ! " ${ZIPTOOLS[@]} " =~ " $ziptool " ]]; then
 		error $LINENO "$ziptool is an unsupported ziptool."
 		exit -17
 	else
-		REQUIRED_TOOLS="$REQUIRED_TOOLS $ziptool"
+		if [[ $parallel == true && ziptool == "gzip" ]]; then
+			REQUIRED_TOOLS="$REQUIRED_TOOLS pigz"
+		else
+			REQUIRED_TOOLS="$REQUIRED_TOOLS $ziptool"
+		fi
 	fi
 fi
 
@@ -340,23 +344,24 @@ if ! truncate -s "$endresult" "$img"; then
 	exit -16
 fi
 
-if [[ $compress == true ]]; then
+if [[ -n $ziptool ]]; then
 	options=""
-	envVarname="${MYNAME^^}_${ziptool^^}"
+	envVarname="${MYNAME^^}_${ziptool^^}" # PISHRINK_GZIP or PISHRINK_XZ environment variables allow to override options
+	[[ $parallel == true ]] && options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
+	[[ -v $envVarname ]] && options="${!envVarname}" # if environment variable defined use these options
+	[[ $verbose == true ]] && options="$options -v" # add verbose flag 
+	
 	if [[ $parallel == true ]]; then
-		options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
-		[[ -v $envVarname ]] && options="${!envVarname}"
-		[[ $verbose == true ]] && options="$options -v"
-		info "Using $ziptool on the shrunk image using options ${options}"
-		if ! $ziptool ${options} "$img"; then
+		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
+		info "Using $parallel_tool on the shrunk image"
+		if ! $parallel_tool ${options} "$img"; then
 			rc=$?
-			error $LINENO "$ziptool failed with rc $rc"
+			error $LINENO "$parallel_tool failed with rc $rc"
 			exit -18
 		fi
+		
 	else # sequential
 		info "Using $ziptool on the shrunk image"
-		[[ -v $envVarname ]] && options="${!envVarname}"
-		[[ $verbose == true ]] && options="$options -v"
 		if ! $ziptool ${options} $img; then
 			rc=$?
 			error $LINENO "$ziptool failed with rc $rc"
