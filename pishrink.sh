@@ -93,7 +93,7 @@ prep=false
 ziptool=""
 required_tools="$REQUIRED_TOOLS"
 
-while getopts ":adhipr:svz" opt; do
+while getopts ":adhipr:svzZ" opt; do
   case "${opt}" in
     a) parallel=true;;
     d) debug=true;;
