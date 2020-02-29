@@ -6,28 +6,27 @@ using multiple cores is supported.
 
 ## Usage ##
 ```
-Usage: $0 [-sdiarpzZvh] imagefile.img [newimagefile.img]
+Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
-  -d         Write debug messages in a debug log file
-  -r         Use advanced filesystem repair option if the normal one fails
-  -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
   -v         Be verbose
+  -r         Use advanced filesystem repair option if the normal one fails
   -z         Compress image after shrinking with gzip
   -Z         Compress image after shrinking with xz
   -a         Compress image in parallel using multiple cores
+  -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
+  -d         Write debug messages in a debug log file
 ```
 
 If you specify the `newimagefile.img` parameter, the script will make a copy of `imagefile.img` and work off that. You will need enough space to make a full copy of the image to use that option.
 
-* `-s` will skip the autoexpanding part of the process.
-* `-d` will create a logfile `pishrink.log` which may help for problem analysis.
 * `-r` will attempt to repair the filesystem if regular repairs fail
 * `-z` will compress the image after shrinking using gzip. `.gz` extension will be added to the filename.
 * `-Z` will compress the image after shrinking using xz. `.xz` extension will be added to the filename.
-* `-a` will use option -f9 for pigz and option -T0 for xz.
+* `-a` will use option -f9 for pigz and option -T0 for xz and compress in parallel.
+* `-d` will create a logfile `pishrink.log` which may help for problem analysis.
 
-Default options for parallel compression can be overwritten by defining PISHRINK_GZIP or PSHRINK_XZ environment variables.
+Default options for parallel compression can be overwritten by defining PISHRINK_GZIP or PSHRINK_XZ environment variables for gzip and xz.
 
 ## Prerequisites ##
 If you are trying to shrink a [NOOBS](https://github.com/raspberrypi/noobs) image it will likely fail. This is due to [NOOBS partitioning](https://github.com/raspberrypi/noobs/wiki/NOOBS-partitioning-explained) being significantly different than Raspbian's. Hopefully PiShrink will be able to support NOOBS in the near future.

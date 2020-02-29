@@ -69,16 +69,16 @@ fi
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-sdarpzZvh] imagefile.img [newimagefile.img]
+Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
-  -d         Write debug messages in a debug log file
-  -r         Use advanced filesystem repair option if the normal one fails
-  -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
   -v			 Be verbose
+  -r         Use advanced filesystem repair option if the normal one fails
   -z         Compress image after shrinking with gzip
   -Z         Compress image after shrinking with xz
   -a         Compress image in parallel using multiple cores
+  -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
+  -d         Write debug messages in a debug log file
 EOM
 	echo "$help"
 	exit -1
@@ -93,7 +93,7 @@ prep=false
 ziptool=""
 required_tools="$REQUIRED_TOOLS"
 
-while getopts ":adhipr:svzZ" opt; do
+while getopts ":adhprsvzZ" opt; do
   case "${opt}" in
     a) parallel=true;;
     d) debug=true;;
@@ -101,9 +101,9 @@ while getopts ":adhipr:svzZ" opt; do
     p) prep=true;;
     r) repair=true;;
     s) should_skip_autoexpand=true ;;
+    v) verbose=true;;
     z) ziptool="gzip";;
     Z) ziptool="xz";;
-    v) verbose=true;;
     *) help;;
   esac
 done
@@ -344,12 +344,13 @@ if ! truncate -s "$endresult" "$img"; then
 	exit -16
 fi
 
+# handle compression
 if [[ -n $ziptool ]]; then
 	options=""
-	envVarname="${MYNAME^^}_${ziptool^^}" # PISHRINK_GZIP or PISHRINK_XZ environment variables allow to override options
+	envVarname="${MYNAME^^}_${ziptool^^}" # PISHRINK_GZIP or PISHRINK_XZ environment variables allow to override all options for gzip or xz
 	[[ $parallel == true ]] && options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
 	[[ -v $envVarname ]] && options="${!envVarname}" # if environment variable defined use these options
-	[[ $verbose == true ]] && options="$options -v" # add verbose flag 
+	[[ $verbose == true ]] && options="$options -v" # add verbose flag if requested
 	
 	if [[ $parallel == true ]]; then
 		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
