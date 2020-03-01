@@ -26,7 +26,7 @@ If you specify the `newimagefile.img` parameter, the script will make a copy of 
 * `-a` will use option -f9 for pigz and option -T0 for xz and compress in parallel.
 * `-d` will create a logfile `pishrink.log` which may help for problem analysis.
 
-Default options for parallel compression can be overwritten by defining PISHRINK_GZIP or PSHRINK_XZ environment variables for gzip and xz.
+Default options for compressors can be overwritten by defining PISHRINK_GZIP or PSHRINK_XZ environment variables for gzip and xz.
 
 ## Prerequisites ##
 If you are trying to shrink a [NOOBS](https://github.com/raspberrypi/noobs) image it will likely fail. This is due to [NOOBS partitioning](https://github.com/raspberrypi/noobs/wiki/NOOBS-partitioning-explained) being significantly different than Raspbian's. Hopefully PiShrink will be able to support NOOBS in the near future.
