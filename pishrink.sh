@@ -178,7 +178,12 @@ trap cleanup ERR EXIT
 #Gather info
 info "Gathering data"
 beforesize="$(ls -lh "$img" | cut -d ' ' -f 5)"
-parted_output="$(parted -ms "$img" unit B print | tail -n 1)"
+if ! parted_output=$(parted -ms "$img" unit B print); then
+  rc=$?
+	error $LINENO "parted failed with rc $rc"
+  info "Possibly invalid image. Run 'parted $img unit B print' manually to investigate"
+	exit -6
+fi
 partnum="$(echo "$parted_output" | cut -d ':' -f 1)"
 partstart="$(echo "$parted_output" | cut -d ':' -f 2 | tr -d 'B')"
 loopback="$(losetup -f --show -o "$partstart" "$img")"
@@ -187,6 +192,7 @@ currentsize="$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -
 blocksize="$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)"
 
 logVariables $LINENO beforesize parted_output partnum partstart tune2fs_output currentsize blocksize
+
 #Check if we should make pi expand rootfs on next boot
 if [ "$should_skip_autoexpand" = false ]; then
   #Make pi expand rootfs on next boot
