@@ -178,14 +178,14 @@ trap cleanup ERR EXIT
 #Gather info
 info "Gathering data"
 beforesize="$(ls -lh "$img" | cut -d ' ' -f 5)"
-if ! parted_output=$(parted -ms "$img" unit B print); then
-  rc=$?
+if ! parted_output="$(parted -ms "$img" unit B print)"; then
+	rc=$?
 	error $LINENO "parted failed with rc $rc"
-  info "Possibly invalid image. Run 'parted $img unit B print' manually to investigate"
+	info "Possibly invalid image. Run 'parted $img unit B print' manually to investigate"
 	exit -6
 fi
 partnum="$(echo "$parted_output" | cut -d ':' -f 1)"
-partstart="$(echo "$parted_output" | cut -d ':' -f 2 | tr -d 'B')"
+partstart="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')"
 loopback="$(losetup -f --show -o "$partstart" "$img")"
 tune2fs_output="$(tune2fs -l "$loopback")"
 currentsize="$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)"
