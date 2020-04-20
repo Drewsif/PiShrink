@@ -73,12 +73,12 @@ Usage: $0 [-adfhrspvzZ] imagefile.img [newimagefile.img]
 
   -a         Compress image in parallel using multiple cores
   -d         Write debug messages in a debug log file
-  -f			 Force skip of partition checks for NOOBS and PINN
-  -h			 Help
+  -f	     Force skip of partition checks for NOOBS and PINN
+  -h	     Help
   -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
   -r         Use advanced filesystem repair option if the normal one fails
   -s         Don't expand filesystem when image is booted the first time
-  -v			 Be verbose
+  -v	     Be verbose
   -z         Compress image after shrinking with gzip
   -Z         Compress image after shrinking with xz
 EOM
