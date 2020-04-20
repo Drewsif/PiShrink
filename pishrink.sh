@@ -56,7 +56,7 @@ function checkFilesystem() {
 	e2fsck -y "$loopback"
 	(( $? < 4 )) && return
 
-	if [[ $repair == true ]]; then
+        if [[ $repair == true ]]; then
 		info "Trying to recover corrupted filesystem - Phase 2"
 		e2fsck -fy -b 32768 "$loopback"
 		(( $? < 4 )) && return
@@ -201,8 +201,7 @@ trap cleanup ERR EXIT
 #Gather info
 info "Gathering data"
 beforesize="$(ls -lh "$img" | cut -d ' ' -f 5)"
-parted_output="$(parted -ms "$img" unit B print)"
-rc=$?
+parted_output="$(parted -ms "$img" unit B print)"; rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	info "Possibly invalid image. Run 'parted $img unit B print' manually to investigate"
@@ -211,8 +210,7 @@ fi
 
 partnum="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 1)"
 partstart="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')"
-loopback="$(losetup -f --show -o "$partstart" "$img")"
-rc=$?
+loopback="$(losetup -f --show -o "$partstart" "$img")"; rc=$?
 if (( $rc )); then
 	error $LINENO "losetup failed with rc $rc"
 	exit 42
@@ -227,8 +225,7 @@ logVariables $LINENO beforesize parted_output partnum partstart tune2fs_output c
 if [ "$should_skip_autoexpand" = false ]; then
   #Make pi expand rootfs on next boot
   mountdir=$(mktemp -d)
-  mount "$loopback" "$mountdir"
-  rc=$?
+  mount "$loopback" "$mountdir"; rc=$?
   if (( $rc )); then
 	error $LINENO "mount failed with rc $rc"
 	exit 42
@@ -347,8 +344,7 @@ logVariables $LINENO minsize
 
 #Shrink filesystem
 info "Shrinking filesystem"
-resize2fs -p "$loopback" $minsize
-rc=$?
+resize2fs -p "$loopback" $minsize; rc=$?
 if (( $rc )); then
   error $LINENO "resize2fs failed with rc $rc"
   mount "$loopback" "$mountdir"
@@ -363,15 +359,13 @@ sleep 1
 partnewsize=$(($minsize * $blocksize))
 newpartend=$(($partstart + $partnewsize))
 logVariables $LINENO partnewsize newpartend
-parted -s -a minimal "$img" rm "$partnum"
-rc=$?
+parted -s -a minimal "$img" rm "$partnum"; rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	exit -13
 fi
 
-parted -s "$img" unit B mkpart primary "$partstart" "$newpartend"
-rc=$?
+parted -s "$img" unit B mkpart primary "$partstart" "$newpartend"; rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	exit -14
@@ -379,8 +373,7 @@ fi
 
 #Truncate the file
 info "Shrinking image"
-endresult=$(parted -ms "$img" unit B print free)
-rc=$?
+endresult=$(parted -ms "$img" unit B print free); rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	exit -15
@@ -388,8 +381,7 @@ fi
 
 endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
 logVariables $LINENO endresult
-truncate -s "$endresult" "$img"
-rc=$?
+truncate -s "$endresult" "$img"; rc=$?
 if (( $rc )); then
 	error $LINENO "trunate failed with rc $rc"
 	exit -16
