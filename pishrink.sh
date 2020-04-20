@@ -178,13 +178,14 @@ trap cleanup ERR EXIT
 #Gather info
 info "Gathering data"
 beforesize="$(ls -lh "$img" | cut -d ' ' -f 5)"
-if ! parted_output="$(parted -ms "$img" unit B print)"; then
-	rc=$?
+parted_output="$(parted -ms "$img" unit B print)"
+rc=$?
+if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	info "Possibly invalid image. Run 'parted $img unit B print' manually to investigate"
 	exit -6
 fi
-partnum="$(echo "$parted_output" | cut -d ':' -f 1)"
+partnum="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 1)"
 partstart="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')"
 loopback="$(losetup -f --show -o "$partstart" "$img")"
 tune2fs_output="$(tune2fs -l "$loopback")"
@@ -308,8 +309,9 @@ logVariables $LINENO minsize
 #Shrink filesystem
 info "Shrinking filesystem"
 resize2fs -p "$loopback" $minsize
-if [[ $? != 0 ]]; then
-  error $LINENO "resize2fs failed"
+rc=$?
+if (( $rc )); then
+  error $LINENO "resize2fs failed with rc $rc"
   mount "$loopback" "$mountdir"
   mv "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local"
   umount "$mountdir"
@@ -322,30 +324,34 @@ sleep 1
 partnewsize=$(($minsize * $blocksize))
 newpartend=$(($partstart + $partnewsize))
 logVariables $LINENO partnewsize newpartend
-if ! parted -s -a minimal "$img" rm "$partnum"; then
-	rc=$?
+parted -s -a minimal "$img" rm "$partnum"
+rc=$?
+if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	exit -13
 fi
 
-if ! parted -s "$img" unit B mkpart primary "$partstart" "$newpartend"; then
-	rc=$?
+parted -s "$img" unit B mkpart primary "$partstart" "$newpartend"
+rc=$?
+if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	exit -14
 fi
 
 #Truncate the file
 info "Shrinking image"
-if ! endresult=$(parted -ms "$img" unit B print free); then
-	rc=$?
+endresult=$(parted -ms "$img" unit B print free)
+rc=$?
+if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	exit -15
 fi
 
 endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
 logVariables $LINENO endresult
-if ! truncate -s "$endresult" "$img"; then
-	rc=$?
+truncate -s "$endresult" "$img"
+rc=$?
+if (( $rc )); then
 	error $LINENO "trunate failed with rc $rc"
 	exit -16
 fi
