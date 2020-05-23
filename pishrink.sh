@@ -91,7 +91,6 @@ parallel=false
 verbose=false
 prep=false
 ziptool=""
-required_tools="$REQUIRED_TOOLS"
 
 while getopts ":adhprsvzZ" opt; do
   case "${opt}" in
@@ -142,7 +141,7 @@ if [[ -n $ziptool ]]; then
 		error $LINENO "$ziptool is an unsupported ziptool."
 		exit -17
 	else
-		if [[ $parallel == true && ziptool == "gzip" ]]; then
+		if [[ $parallel == true && $ziptool == "gzip" ]]; then
 			REQUIRED_TOOLS="$REQUIRED_TOOLS pigz"
 		else
 			REQUIRED_TOOLS="$REQUIRED_TOOLS $ziptool"
