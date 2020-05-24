@@ -56,7 +56,7 @@ function checkFilesystem() {
 	e2fsck -y "$loopback"
 	(( $? < 4 )) && return
 
-        if [[ $repair == true ]]; then
+	if [[ $repair == true ]]; then
 		info "Trying to recover corrupted filesystem - Phase 2"
 		e2fsck -fy -b 32768 "$loopback"
 		(( $? < 4 )) && return
@@ -147,7 +147,7 @@ if [[ -n $ziptool ]]; then
 		error $LINENO "$ziptool is an unsupported ziptool."
 		exit -17
 	else
-		if [[ $parallel == true && ziptool == "gzip" ]]; then
+		if [[ $parallel == true && $ziptool == "gzip" ]]; then
 			REQUIRED_TOOLS="$REQUIRED_TOOLS pigz"
 		else
 			REQUIRED_TOOLS="$REQUIRED_TOOLS $ziptool"
@@ -184,15 +184,19 @@ done
 
 #Copy to new file if requested
 if [ -n "$2" ]; then
-  info "Copying $1 to $2..."
-  cp --reflink=auto --sparse=always "$1" "$2"
+  f="$2"
+  if [[ -n $ziptool && "${f##*.}" == ${ZIPEXTENSIONS[$ziptool]} ]]; then	# remove zip extension if zip requested because zip tool will complain about extension
+    f="${f%.*}"
+  fi
+  info "Copying $1 to $f..."
+  cp --reflink=auto --sparse=always "$1" "$f"
   if (( $? != 0 )); then
     error $LINENO "Could not copy file..."
     exit -5
   fi
   old_owner=$(stat -c %u:%g "$1")
-  chown "$old_owner" "$2"
-  img="$2"
+  chown "$old_owner" "$f"
+  img="$f"
 fi
 
 # cleanup at script exit
