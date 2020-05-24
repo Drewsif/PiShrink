@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version="v0.1.2"
+version="v0.1.3"
 
 CURRENT_DIR="$(pwd)"
 SCRIPTNAME="${0##*/}"
@@ -56,11 +56,11 @@ function checkFilesystem() {
 	e2fsck -y "$loopback"
 	(( $? < 4 )) && return
 
-if [[ $repair == true ]]; then
-	info "Trying to recover corrupted filesystem - Phase 2"
-	e2fsck -fy -b 32768 "$loopback"
-	(( $? < 4 )) && return
-fi
+	if [[ $repair == true ]]; then
+		info "Trying to recover corrupted filesystem - Phase 2"
+		e2fsck -fy -b 32768 "$loopback"
+		(( $? < 4 )) && return
+	fi
 	error $LINENO "Filesystem recoveries failed. Giving up..."
 	exit -9
 
@@ -69,16 +69,18 @@ fi
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
+Usage: $0 [-adfhrspvzZ] imagefile.img [newimagefile.img]
 
-  -s         Don't expand filesystem when image is booted the first time
-  -v			 Be verbose
+  -a         Compress image in parallel using multiple cores
+  -d         Write debug messages in a debug log file
+  -f         Force skip of partition checks for NOOBS and PINN
+  -h         Help
+  -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
   -r         Use advanced filesystem repair option if the normal one fails
+  -s         Don't expand filesystem when image is booted the first time
+  -v         Be verbose
   -z         Compress image after shrinking with gzip
   -Z         Compress image after shrinking with xz
-  -a         Compress image in parallel using multiple cores
-  -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
-  -d         Write debug messages in a debug log file
 EOM
 	echo "$help"
 	exit -1
@@ -92,11 +94,13 @@ verbose=false
 prep=false
 ziptool=""
 required_tools="$REQUIRED_TOOLS"
+skipPartitionChecks=false
 
-while getopts ":adhprsvzZ" opt; do
+while getopts ":adfhprsvzZ" opt; do
   case "${opt}" in
     a) parallel=true;;
     d) debug=true;;
+    f) skipPartitionChecks=true;;
     h) help;;
     p) prep=true;;
     r) repair=true;;
@@ -125,6 +129,7 @@ img="$1"
 #Usage checks
 if [[ -z "$img" ]]; then
   help
+  exit 42
 fi
 
 if [[ ! -f "$img" ]]; then
@@ -142,11 +147,29 @@ if [[ -n $ziptool ]]; then
 		error $LINENO "$ziptool is an unsupported ziptool."
 		exit -17
 	else
-		if [[ $parallel == true && ziptool == "gzip" ]]; then
+		if [[ $parallel == true && $ziptool == "gzip" ]]; then
 			REQUIRED_TOOLS="$REQUIRED_TOOLS pigz"
 		else
 			REQUIRED_TOOLS="$REQUIRED_TOOLS $ziptool"
 		fi
+	fi
+fi
+
+if [[ $skipPartitionChecks == false ]]; then
+	#Check we have a Raspbian image, NOOBS, PINN et al is not supported
+	numPartitions=$(fdisk -l $img | grep "^Device" -A 10 | grep -v "^Device" | wc -l)
+	rc=$?
+	if (( $rc )); then
+		error $LINENO "fdisk error. rc: $rc"
+		exit 42
+	fi
+	if (( $numPartitions != 2 )); then
+	  error $LINENO "$img has $numPartitions partitions. Note: NOOBS or PINN images are not supported."
+	  exit 42
+	fi
+	if fdisk -l $img | grep -iq extended; then
+	  error $LINENO "$img has an extended partition. Note: NOOBS or PINN images are not supported."
+	  exit 42
 	fi
 fi
 
@@ -161,15 +184,19 @@ done
 
 #Copy to new file if requested
 if [ -n "$2" ]; then
-  info "Copying $1 to $2..."
-  cp --reflink=auto --sparse=always "$1" "$2"
+  f="$2"
+  if [[ -n $ziptool && "${f##*.}" == ${ZIPEXTENSIONS[$ziptool]} ]]; then	# remove zip extension if zip requested because zip tool will complain about extension
+    f="${f%.*}"
+  fi
+  info "Copying $1 to $f..."
+  cp --reflink=auto --sparse=always "$1" "$f"
   if (( $? != 0 )); then
     error $LINENO "Could not copy file..."
     exit -5
   fi
   old_owner=$(stat -c %u:%g "$1")
-  chown "$old_owner" "$2"
-  img="$2"
+  chown "$old_owner" "$f"
+  img="$f"
 fi
 
 # cleanup at script exit
@@ -178,16 +205,20 @@ trap cleanup ERR EXIT
 #Gather info
 info "Gathering data"
 beforesize="$(ls -lh "$img" | cut -d ' ' -f 5)"
-parted_output="$(parted -ms "$img" unit B print)"
-rc=$?
+parted_output="$(parted -ms "$img" unit B print)"; rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	info "Possibly invalid image. Run 'parted $img unit B print' manually to investigate"
 	exit -6
 fi
+
 partnum="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 1)"
 partstart="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')"
-loopback="$(losetup -f --show -o "$partstart" "$img")"
+loopback="$(losetup -f --show -o "$partstart" "$img")"; rc=$?
+if (( $rc )); then
+	error $LINENO "losetup failed with rc $rc"
+	exit 42
+fi
 tune2fs_output="$(tune2fs -l "$loopback")"
 currentsize="$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)"
 blocksize="$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)"
@@ -198,7 +229,16 @@ logVariables $LINENO beforesize parted_output partnum partstart tune2fs_output c
 if [ "$should_skip_autoexpand" = false ]; then
   #Make pi expand rootfs on next boot
   mountdir=$(mktemp -d)
-  mount "$loopback" "$mountdir"
+  mount "$loopback" "$mountdir"; rc=$?
+  if (( $rc )); then
+	error $LINENO "mount failed with rc $rc"
+	exit 42
+  fi
+
+  if [[ ! -f "$mountdir/etc/rc.local" ]]; then
+	error $LINENO "/etc/rc.local not found in $img"
+   exit 42
+  fi
 
   if [ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "0542054e9ff2d2e0507ea1ffe7d4fc87" ]; then
     echo "Creating new /etc/rc.local"
@@ -283,8 +323,8 @@ fi
 #Make sure filesystem is ok
 checkFilesystem
 
-if ! minsize=$(resize2fs -P "$loopback"); then
-	rc=$?
+minsize=$(resize2fs -P "$loopback"); rc=$?
+if (( $rc )); then
 	error $LINENO "resize2fs failed with rc $rc"
 	exit -10
 fi
@@ -308,8 +348,7 @@ logVariables $LINENO minsize
 
 #Shrink filesystem
 info "Shrinking filesystem"
-resize2fs -p "$loopback" $minsize
-rc=$?
+resize2fs -p "$loopback" $minsize; rc=$?
 if (( $rc )); then
   error $LINENO "resize2fs failed with rc $rc"
   mount "$loopback" "$mountdir"
@@ -324,15 +363,13 @@ sleep 1
 partnewsize=$(($minsize * $blocksize))
 newpartend=$(($partstart + $partnewsize))
 logVariables $LINENO partnewsize newpartend
-parted -s -a minimal "$img" rm "$partnum"
-rc=$?
+parted -s -a minimal "$img" rm "$partnum"; rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	exit -13
 fi
 
-parted -s "$img" unit B mkpart primary "$partstart" "$newpartend"
-rc=$?
+parted -s "$img" unit B mkpart primary "$partstart" "$newpartend"; rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	exit -14
@@ -340,8 +377,7 @@ fi
 
 #Truncate the file
 info "Shrinking image"
-endresult=$(parted -ms "$img" unit B print free)
-rc=$?
+endresult=$(parted -ms "$img" unit B print free); rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	exit -15
@@ -349,8 +385,7 @@ fi
 
 endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
 logVariables $LINENO endresult
-truncate -s "$endresult" "$img"
-rc=$?
+truncate -s "$endresult" "$img"; rc=$?
 if (( $rc )); then
 	error $LINENO "trunate failed with rc $rc"
 	exit -16
@@ -363,7 +398,7 @@ if [[ -n $ziptool ]]; then
 	[[ $parallel == true ]] && options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
 	[[ -v $envVarname ]] && options="${!envVarname}" # if environment variable defined use these options
 	[[ $verbose == true ]] && options="$options -v" # add verbose flag if requested
-	
+
 	if [[ $parallel == true ]]; then
 		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
 		info "Using $parallel_tool on the shrunk image"
@@ -372,7 +407,7 @@ if [[ -n $ziptool ]]; then
 			error $LINENO "$parallel_tool failed with rc $rc"
 			exit -18
 		fi
-		
+
 	else # sequential
 		info "Using $ziptool on the shrunk image"
 		if ! $ziptool ${options} $img; then
