@@ -2,12 +2,18 @@
 
 version="v0.1.3"
 
-CURRENT_DIR=$(pwd)
+CURRENT_DIR="$(pwd)"
 SCRIPTNAME="${0##*/}"
-LOGFILE=${CURRENT_DIR}/${SCRIPTNAME%.*}.log
+MYNAME="${SCRIPTNAME%.*}"
+LOGFILE="${CURRENT_DIR}/${SCRIPTNAME%.*}.log"
+REQUIRED_TOOLS="parted losetup tune2fs md5sum e2fsck resize2fs"
+ZIPTOOLS=("gzip xz")
+declare -A ZIP_PARALLEL_TOOL=( [gzip]="pigz" [xz]="xz" ) # parallel zip tool to use in parallel mode
+declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f9" [xz]="-T0" ) # options for zip tools in parallel mode
+declare -A ZIPEXTENSIONS=( [gzip]="gz" [xz]="xz" ) # extensions of zipped files
 
 function info() {
-	echo "$SCRIPTNAME: $1..."
+	echo "$SCRIPTNAME: $1 ..."
 }
 
 function error() {
@@ -63,45 +69,42 @@ fi
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-sdrpzh] imagefile.img [newimagefile.img]
+Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
 
-  -s: Don't expand filesystem when image is booted the first time
-  -d: Write debug messages in a debug log file
-  -r: Use advanced filesystem repair option if the normal one fails
-  -p: Remove logs, apt archives, dhcp leases and ssh hostkeys
-  -z: Gzip compress image after shrinking
+  -s         Don't expand filesystem when image is booted the first time
+  -v			 Be verbose
+  -r         Use advanced filesystem repair option if the normal one fails
+  -z         Compress image after shrinking with gzip
+  -Z         Compress image after shrinking with xz
+  -a         Compress image in parallel using multiple cores
+  -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
+  -d         Write debug messages in a debug log file
 EOM
 	echo "$help"
-	exit -1
-}
-
-usage() {
-	echo "Usage: $0 [-sdrpzh] imagefile.img [newimagefile.img]"
-	echo ""
-	echo "  -s: Skip autoexpand"
-	echo "  -d: Debug mode on"
-	echo "  -r: Use advanced repair options"
-	echo "  -p: Remove logs, apt archives, dhcp leases and ssh hostkeys"
-	echo "  -z: Gzip compress image after shrinking"
-	echo "  -h: display help text"
 	exit -1
 }
 
 should_skip_autoexpand=false
 debug=false
 repair=false
-gzip_compress=false
+parallel=false
+verbose=false
 prep=false
+ziptool=""
+required_tools="$REQUIRED_TOOLS"
 
-while getopts ":sdrpzh" opt; do
+while getopts ":adhprsvzZ" opt; do
   case "${opt}" in
-    s) should_skip_autoexpand=true ;;
+    a) parallel=true;;
     d) debug=true;;
-    r) repair=true;;
-    p) prep=true;;
-    z) gzip_compress=true;;
     h) help;;
-    *) usage ;;
+    p) prep=true;;
+    r) repair=true;;
+    s) should_skip_autoexpand=true ;;
+    v) verbose=true;;
+    z) ziptool="gzip";;
+    Z) ziptool="xz";;
+    *) help;;
   esac
 done
 shift $((OPTIND-1))
@@ -121,8 +124,9 @@ img="$1"
 
 #Usage checks
 if [[ -z "$img" ]]; then
-  usage
+  help
 fi
+
 if [[ ! -f "$img" ]]; then
   error $LINENO "$img is not a file..."
   exit -2
@@ -132,8 +136,22 @@ if (( EUID != 0 )); then
   exit -3
 fi
 
+# check selected compression tool is supported and installed
+if [[ -n $ziptool ]]; then
+	if [[ ! " ${ZIPTOOLS[@]} " =~ " $ziptool " ]]; then
+		error $LINENO "$ziptool is an unsupported ziptool."
+		exit -17
+	else
+		if [[ $parallel == true && ziptool == "gzip" ]]; then
+			REQUIRED_TOOLS="$REQUIRED_TOOLS pigz"
+		else
+			REQUIRED_TOOLS="$REQUIRED_TOOLS $ziptool"
+		fi
+	fi
+fi
+
 #Check that what we need is installed
-for command in parted losetup tune2fs md5sum e2fsck resize2fs; do
+for command in $REQUIRED_TOOLS; do
   command -v $command >/dev/null 2>&1
   if (( $? != 0 )); then
     error $LINENO "$command is not installed."
@@ -159,16 +177,22 @@ trap cleanup ERR EXIT
 
 #Gather info
 info "Gathering data"
-beforesize=$(ls -lh "$img" | cut -d ' ' -f 5)
-parted_output=$(parted -ms "$img" unit B print | tail -n 1)
-partnum=$(echo "$parted_output" | cut -d ':' -f 1)
-partstart=$(echo "$parted_output" | cut -d ':' -f 2 | tr -d 'B')
-loopback=$(losetup -f --show -o "$partstart" "$img")
-tune2fs_output=$(tune2fs -l "$loopback")
-currentsize=$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)
-blocksize=$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)
+beforesize="$(ls -lh "$img" | cut -d ' ' -f 5)"
+parted_output="$(parted -ms "$img" unit B print)"
+rc=$?
+if (( $rc )); then
+	error $LINENO "parted failed with rc $rc"
+	info "Possibly invalid image. Run 'parted $img unit B print' manually to investigate"
+	exit -6
+fi
+partnum="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 1)"
+partstart="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')"
+loopback="$(losetup -f --show -o "$partstart" "$img")"
+tune2fs_output="$(tune2fs -l "$loopback")"
+currentsize="$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)"
+blocksize="$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)"
 
-logVariables $LINENO tune2fs_output currentsize blocksize
+logVariables $LINENO beforesize parted_output partnum partstart tune2fs_output currentsize blocksize
 
 #Check if we should make pi expand rootfs on next boot
 if [ "$should_skip_autoexpand" = false ]; then
@@ -214,7 +238,7 @@ if [[ $prep == true ]]; then
   info "Syspreping: Removing logs, apt archives, dhcp leases and ssh hostkeys"
   mountdir=$(mktemp -d)
   mount "$loopback" "$mountdir"
-  rm -rf "$mountdir/var/cache/apt/archives/*" "$mountdir/var/lib/dhcpcd5/*" "$mountdir/var/log/*" "$mountdir/var/tmp/*" "$mountdir/tmp/*" "$mountdir/etc/ssh/*_host_*" 
+  rm -rf "$mountdir/var/cache/apt/archives/*" "$mountdir/var/lib/dhcpcd5/*" "$mountdir/var/log/*" "$mountdir/var/tmp/*" "$mountdir/tmp/*" "$mountdir/etc/ssh/*_host_*"
   umount "$mountdir"
 fi
 
@@ -228,7 +252,7 @@ if ! minsize=$(resize2fs -P "$loopback"); then
 	exit -10
 fi
 minsize=$(cut -d ':' -f 2 <<< "$minsize" | tr -d ' ')
-logVariables $LINENO minsize
+logVariables $LINENO currentsize minsize
 if [[ $currentsize -eq $minsize ]]; then
   error $LINENO "Image already shrunk to smallest size"
   exit -11
@@ -248,8 +272,9 @@ logVariables $LINENO minsize
 #Shrink filesystem
 info "Shrinking filesystem"
 resize2fs -p "$loopback" $minsize
-if [[ $? != 0 ]]; then
-  error $LINENO "resize2fs failed"
+rc=$?
+if (( $rc )); then
+  error $LINENO "resize2fs failed with rc $rc"
   mount "$loopback" "$mountdir"
   mv "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local"
   umount "$mountdir"
@@ -262,39 +287,64 @@ sleep 1
 partnewsize=$(($minsize * $blocksize))
 newpartend=$(($partstart + $partnewsize))
 logVariables $LINENO partnewsize newpartend
-if ! parted -s -a minimal "$img" rm "$partnum"; then
-	rc=$?
+parted -s -a minimal "$img" rm "$partnum"
+rc=$?
+if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	exit -13
 fi
 
-if ! parted -s "$img" unit B mkpart primary "$partstart" "$newpartend"; then
-	rc=$?
+parted -s "$img" unit B mkpart primary "$partstart" "$newpartend"
+rc=$?
+if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	exit -14
 fi
 
 #Truncate the file
 info "Shrinking image"
-if ! endresult=$(parted -ms "$img" unit B print free); then
-	rc=$?
+endresult=$(parted -ms "$img" unit B print free)
+rc=$?
+if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	exit -15
 fi
 
 endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
 logVariables $LINENO endresult
-if ! truncate -s "$endresult" "$img"; then
-	rc=$?
+truncate -s "$endresult" "$img"
+rc=$?
+if (( $rc )); then
 	error $LINENO "trunate failed with rc $rc"
 	exit -16
 fi
 
-if [[ $gzip_compress == true ]]; then
-    info "Gzipping the shrunk image"
-    if [[ ! $(gzip -f9 "$img") ]]; then
-        img=$img.gz
-    fi
+# handle compression
+if [[ -n $ziptool ]]; then
+	options=""
+	envVarname="${MYNAME^^}_${ziptool^^}" # PISHRINK_GZIP or PISHRINK_XZ environment variables allow to override all options for gzip or xz
+	[[ $parallel == true ]] && options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
+	[[ -v $envVarname ]] && options="${!envVarname}" # if environment variable defined use these options
+	[[ $verbose == true ]] && options="$options -v" # add verbose flag if requested
+	
+	if [[ $parallel == true ]]; then
+		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
+		info "Using $parallel_tool on the shrunk image"
+		if ! $parallel_tool ${options} "$img"; then
+			rc=$?
+			error $LINENO "$parallel_tool failed with rc $rc"
+			exit -18
+		fi
+		
+	else # sequential
+		info "Using $ziptool on the shrunk image"
+		if ! $ziptool ${options} $img; then
+			rc=$?
+			error $LINENO "$ziptool failed with rc $rc"
+			exit -19
+		fi
+	fi
+	img=$img.${ZIPEXTENSIONS[$ziptool]}
 fi
 
 aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
