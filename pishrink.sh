@@ -173,7 +173,7 @@ if [ -n "$2" ]; then
 fi
 
 # cleanup at script exit
-trap cleanup ERR EXIT
+trap cleanup EXIT
 
 #Gather info
 info "Gathering data"
@@ -200,10 +200,11 @@ if [ "$should_skip_autoexpand" = false ]; then
   mountdir=$(mktemp -d)
   mount "$loopback" "$mountdir"
 
-  if [ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "0542054e9ff2d2e0507ea1ffe7d4fc87" ]; then
+  if [[ -f "$mountdir/etc/rc.local" ]] && [[ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "0542054e9ff2d2e0507ea1ffe7d4fc87" ]]; then
     echo "Creating new /etc/rc.local"
     mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
-    #####Do not touch the following lines#####
+
+#####Do not touch the following lines#####
 
 cat <<\EOF1 > "$mountdir/etc/rc.local"
 #!/bin/bash
@@ -238,7 +239,10 @@ cat <<EOF > /etc/rc.local &&
 #!/bin/sh
 echo "Expanding /dev/$ROOT_PART"
 resize2fs /dev/$ROOT_PART
-rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
+if [[ -f /etc/rc.local.bak ]]; then
+  cp -f /etc/rc.local.bak /etc/rc.local
+  /etc/rc.local
+fi
 
 EOF
 reboot
@@ -363,7 +367,7 @@ if [[ -n $ziptool ]]; then
 	[[ $parallel == true ]] && options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
 	[[ -v $envVarname ]] && options="${!envVarname}" # if environment variable defined use these options
 	[[ $verbose == true ]] && options="$options -v" # add verbose flag if requested
-	
+
 	if [[ $parallel == true ]]; then
 		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
 		info "Using $parallel_tool on the shrunk image"
@@ -372,7 +376,7 @@ if [[ -n $ziptool ]]; then
 			error $LINENO "$parallel_tool failed with rc $rc"
 			exit -18
 		fi
-		
+
 	else # sequential
 		info "Using $ziptool on the shrunk image"
 		if ! $ziptool ${options} $img; then
