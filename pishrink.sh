@@ -77,8 +77,8 @@ function set_autoexpand() {
         return
     fi
 
-    if [ "$(md5sum "$mountdir/etc/rc.local" 2>/dev/null | cut -d ' ' -f 1)" != "0542054e9ff2d2e0507ea1ffe7d4fc87" ]; then
-    echo "Creating new /etc/rc.local"
+    if [[ -f "$mountdir/etc/rc.local" ]] && [[ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "1c579c7d5b4292fd948399b6ece39009" ]]; then
+      echo "Creating new /etc/rc.local"
     if [ -f "$mountdir/etc/rc.local" ]; then
         mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
     fi
@@ -139,7 +139,10 @@ sleep 5
 do_expand_rootfs
 echo "ERROR: Expanding failed..."
 sleep 5
-rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
+if [[ -f /etc/rc.local.bak ]]; then
+  cp -f /etc/rc.local.bak /etc/rc.local
+  /etc/rc.local
+fi
 exit 0
 EOF1
     #####End no touch zone#####
@@ -173,7 +176,6 @@ parallel=false
 verbose=false
 prep=false
 ziptool=""
-required_tools="$REQUIRED_TOOLS"
 
 while getopts ":adhprsvzZ" opt; do
   case "${opt}" in
@@ -224,7 +226,7 @@ if [[ -n $ziptool ]]; then
 		error $LINENO "$ziptool is an unsupported ziptool."
 		exit -17
 	else
-		if [[ $parallel == true && ziptool == "gzip" ]]; then
+		if [[ $parallel == true && $ziptool == "gzip" ]]; then
 			REQUIRED_TOOLS="$REQUIRED_TOOLS pigz"
 		else
 			REQUIRED_TOOLS="$REQUIRED_TOOLS $ziptool"
@@ -243,19 +245,23 @@ done
 
 #Copy to new file if requested
 if [ -n "$2" ]; then
-  info "Copying $1 to $2..."
-  cp --reflink=auto --sparse=always "$1" "$2"
+  f="$2"
+  if [[ -n $ziptool && "${f##*.}" == ${ZIPEXTENSIONS[$ziptool]} ]]; then	# remove zip extension if zip requested because zip tool will complain about extension
+    f="${f%.*}"
+  fi
+  info "Copying $1 to $f..."
+  cp --reflink=auto --sparse=always "$1" "$f"
   if (( $? != 0 )); then
     error $LINENO "Could not copy file..."
     exit -5
   fi
   old_owner=$(stat -c %u:%g "$1")
-  chown "$old_owner" "$2"
-  img="$2"
+  chown "$old_owner" "$f"
+  img="$f"
 fi
 
 # cleanup at script exit
-trap cleanup ERR EXIT
+trap cleanup EXIT
 
 #Gather info
 info "Gathering data"
@@ -382,7 +388,7 @@ if [[ -n $ziptool ]]; then
 	[[ $parallel == true ]] && options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
 	[[ -v $envVarname ]] && options="${!envVarname}" # if environment variable defined use these options
 	[[ $verbose == true ]] && options="$options -v" # add verbose flag if requested
-	
+
 	if [[ $parallel == true ]]; then
 		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
 		info "Using $parallel_tool on the shrunk image"
@@ -391,7 +397,7 @@ if [[ -n $ziptool ]]; then
 			error $LINENO "$parallel_tool failed with rc $rc"
 			exit -18
 		fi
-		
+
 	else # sequential
 		info "Using $ziptool on the shrunk image"
 		if ! $ziptool ${options} $img; then
