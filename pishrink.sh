@@ -69,6 +69,7 @@ fi
 function set_autoexpand() {
     #Make pi expand rootfs on next boot
     mountdir=$(mktemp -d)
+    partprobe "$loopback"
     mount "$loopback" "$mountdir"
 
     if [ ! -d "$mountdir/etc" ]; then
