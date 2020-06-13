@@ -276,6 +276,11 @@ if (( $rc )); then
 fi
 partnum="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 1)"
 partstart="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')"
+if [ -z "$(parted -s "$img" unit B print | grep "$partstart" | grep logical)" ]; then
+    parttype="primary"
+else
+    parttype="logical"
+fi
 loopback="$(losetup -f --show -o "$partstart" "$img")"
 tune2fs_output="$(tune2fs -l "$loopback")"
 rc=$?
@@ -288,11 +293,13 @@ fi
 currentsize="$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)"
 blocksize="$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)"
 
-logVariables $LINENO beforesize parted_output partnum partstart tune2fs_output currentsize blocksize
+logVariables $LINENO beforesize parted_output partnum partstart parttype tune2fs_output currentsize blocksize
 
 #Check if we should make pi expand rootfs on next boot
-if [ "$should_skip_autoexpand" = false ]; then
-    set_autoexpand
+if [ "$parttype" == "logical" ]; then
+  echo "WARNING: PiShrink does not yet support autoexpanding of this type of image"
+elif [ "$should_skip_autoexpand" = false ]; then
+  set_autoexpand
 else
   echo "Skipping autoexpanding process..."
 fi
@@ -357,7 +364,7 @@ if (( $rc )); then
 	exit -13
 fi
 
-parted -s "$img" unit B mkpart primary "$partstart" "$newpartend"
+parted -s "$img" unit B mkpart "$parttype" "$partstart" "$newpartend"
 rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
