@@ -222,7 +222,7 @@ fi
 
 # check selected compression tool is supported and installed
 if [[ -n $ziptool ]]; then
-	if [[ ! " ${ZIPTOOLS[@]} " =~ " $ziptool " ]]; then
+	if [[ ! " ${ZIPTOOLS[@]} " =~ $ziptool ]]; then
 		error $LINENO "$ziptool is an unsupported ziptool."
 		exit -17
 	else
@@ -246,7 +246,7 @@ done
 #Copy to new file if requested
 if [ -n "$2" ]; then
   f="$2"
-  if [[ -n $ziptool && "${f##*.}" == ${ZIPEXTENSIONS[$ziptool]} ]]; then	# remove zip extension if zip requested because zip tool will complain about extension
+  if [[ -n $ziptool && "${f##*.}" == "${ZIPEXTENSIONS[$ziptool]}" ]]; then	# remove zip extension if zip requested because zip tool will complain about extension
     f="${f%.*}"
   fi
   info "Copying $1 to $f..."
@@ -392,7 +392,7 @@ if [[ -n $ziptool ]]; then
 	if [[ $parallel == true ]]; then
 		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
 		info "Using $parallel_tool on the shrunk image"
-		if ! $parallel_tool ${options} "$img"; then
+		if ! $parallel_tool "${options}" "$img"; then
 			rc=$?
 			error $LINENO "$parallel_tool failed with rc $rc"
 			exit -18
@@ -400,7 +400,7 @@ if [[ -n $ziptool ]]; then
 
 	else # sequential
 		info "Using $ziptool on the shrunk image"
-		if ! $ziptool ${options} $img; then
+		if ! $ziptool "${options}" "$img"; then
 			rc=$?
 			error $LINENO "$ziptool failed with rc $rc"
 			exit -19
