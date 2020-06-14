@@ -62,7 +62,7 @@ if [[ $repair == true ]]; then
 	(( $? < 4 )) && return
 fi
 	error $LINENO "Filesystem recoveries failed. Giving up..."
-	exit -9
+	exit 9
 
 }
 
@@ -167,7 +167,7 @@ Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
   -d         Write debug messages in a debug log file
 EOM
 	echo "$help"
-	exit -1
+	exit 1
 }
 
 should_skip_autoexpand=false
@@ -214,18 +214,18 @@ fi
 
 if [[ ! -f "$img" ]]; then
   error $LINENO "$img is not a file..."
-  exit -2
+  exit 2
 fi
 if (( EUID != 0 )); then
   error $LINENO "You need to be running as root."
-  exit -3
+  exit 3
 fi
 
 # check selected compression tool is supported and installed
 if [[ -n $ziptool ]]; then
 	if [[ ! " ${ZIPTOOLS[@]} " =~ $ziptool ]]; then
 		error $LINENO "$ziptool is an unsupported ziptool."
-		exit -17
+		exit 17
 	else
 		if [[ $parallel == true && $ziptool == "gzip" ]]; then
 			REQUIRED_TOOLS="$REQUIRED_TOOLS pigz"
@@ -240,7 +240,7 @@ for command in $REQUIRED_TOOLS; do
   command -v $command >/dev/null 2>&1
   if (( $? != 0 )); then
     error $LINENO "$command is not installed."
-    exit -4
+    exit 4
   fi
 done
 
@@ -254,7 +254,7 @@ if [ -n "$2" ]; then
   cp --reflink=auto --sparse=always "$1" "$f"
   if (( $? != 0 )); then
     error $LINENO "Could not copy file..."
-    exit -5
+    exit 5
   fi
   old_owner=$(stat -c %u:%g "$1")
   chown "$old_owner" "$f"
@@ -272,7 +272,7 @@ rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	info "Possibly invalid image. Run 'parted $img unit B print' manually to investigate"
-	exit -6
+	exit 6
 fi
 partnum="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 1)"
 partstart="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')"
@@ -319,13 +319,13 @@ checkFilesystem
 if ! minsize=$(resize2fs -P "$loopback"); then
 	rc=$?
 	error $LINENO "resize2fs failed with rc $rc"
-	exit -10
+	exit 10
 fi
 minsize=$(cut -d ':' -f 2 <<< "$minsize" | tr -d ' ')
 logVariables $LINENO currentsize minsize
 if [[ $currentsize -eq $minsize ]]; then
   error $LINENO "Image already shrunk to smallest size"
-  exit -11
+  exit 11
 fi
 
 #Add some free space to the end of the filesystem
@@ -349,7 +349,7 @@ if (( $rc )); then
   mv "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local"
   umount "$mountdir"
   losetup -d "$loopback"
-  exit -12
+  exit 12
 fi
 sleep 1
 
@@ -361,14 +361,14 @@ parted -s -a minimal "$img" rm "$partnum"
 rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
-	exit -13
+	exit 13
 fi
 
 parted -s "$img" unit B mkpart "$parttype" "$partstart" "$newpartend"
 rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
-	exit -14
+	exit 14
 fi
 
 #Truncate the file
@@ -377,7 +377,7 @@ endresult=$(parted -ms "$img" unit B print free)
 rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
-	exit -15
+	exit 15
 fi
 
 endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
@@ -386,7 +386,7 @@ truncate -s "$endresult" "$img"
 rc=$?
 if (( $rc )); then
 	error $LINENO "trunate failed with rc $rc"
-	exit -16
+	exit 16
 fi
 
 # handle compression
@@ -402,7 +402,7 @@ if [[ -n $ziptool ]]; then
 		if ! $parallel_tool "${options}" "$img"; then
 			rc=$?
 			error $LINENO "$parallel_tool failed with rc $rc"
-			exit -18
+			exit 18
 		fi
 
 	else # sequential
@@ -410,7 +410,7 @@ if [[ -n $ziptool ]]; then
 		if ! $ziptool "${options}" "$img"; then
 			rc=$?
 			error $LINENO "$ziptool failed with rc $rc"
-			exit -19
+			exit 19
 		fi
 	fi
 	img=$img.${ZIPEXTENSIONS[$ziptool]}
