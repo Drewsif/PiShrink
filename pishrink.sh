@@ -395,7 +395,6 @@ if [[ -n $ziptool ]]; then
 	envVarname="${MYNAME^^}_${ziptool^^}" # PISHRINK_GZIP or PISHRINK_XZ environment variables allow to override all options for gzip or xz
 	[[ $parallel == true ]] && options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
 	[[ -v $envVarname ]] && options="${!envVarname}" # if environment variable defined use these options
-	[[ $verbose == true ]] && options="$options -v" # add verbose flag if requested
 
 	if [[ $parallel == true ]]; then
 		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
