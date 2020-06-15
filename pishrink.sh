@@ -399,7 +399,7 @@ if [[ -n $ziptool ]]; then
 	if [[ $parallel == true ]]; then
 		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
 		info "Using $parallel_tool on the shrunk image"
-		if ! $parallel_tool "${options}" "$img"; then
+		if ! $parallel_tool ${options} "$img"; then
 			rc=$?
 			error $LINENO "$parallel_tool failed with rc $rc"
 			exit 18
@@ -407,7 +407,7 @@ if [[ -n $ziptool ]]; then
 
 	else # sequential
 		info "Using $ziptool on the shrunk image"
-		if ! $ziptool "${options}" "$img"; then
+		if ! $ziptool ${options} "$img"; then
 			rc=$?
 			error $LINENO "$ziptool failed with rc $rc"
 			exit 19
