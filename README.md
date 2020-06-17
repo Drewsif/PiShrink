@@ -22,7 +22,9 @@ Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
 
 If you specify the `newimagefile.img` parameter, the script will make a copy of `imagefile.img` and work off that. You will need enough space to make a full copy of the image to use that option.
 
-* `-r` will attempt to repair the filesystem if regular repairs fail
+* `-s` prevents automatic filesystem expantion on the images next boot
+* `-v` enables more verbose output
+* `-r` will attempt to repair the filesystem using aditional options if the normal repair fails
 * `-z` will compress the image after shrinking using gzip. `.gz` extension will be added to the filename.
 * `-Z` will compress the image after shrinking using xz. `.xz` extension will be added to the filename.
 * `-a` will use option -f9 for pigz and option -T0 for xz and compress in parallel.
