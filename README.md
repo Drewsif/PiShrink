@@ -1,10 +1,12 @@
 
 # PiShrink #
+
 PiShrink is a bash script that automatically shrink a pi image that will then resize to the max size of the SD card on boot. This will make putting the image back onto the SD card faster and the shrunk images will compress better.
 In addition the shrinked image can be compressed with gzip and xz to create an even smaller image. Parallel compression of the image
 using multiple cores is supported.
 
 ## Usage ##
+
 ```
 Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
 
@@ -29,11 +31,16 @@ If you specify the `newimagefile.img` parameter, the script will make a copy of 
 Default options for compressors can be overwritten by defining PISHRINK_GZIP or PSHRINK_XZ environment variables for gzip and xz.
 
 ## Prerequisites ##
-If you are trying to shrink a [NOOBS](https://github.com/raspberrypi/noobs) image it will likely fail. This is due to [NOOBS partitioning](https://github.com/raspberrypi/noobs/wiki/NOOBS-partitioning-explained) being significantly different than Raspbian's. Hopefully PiShrink will be able to support NOOBS in the near future.
+
+If you are running PiShrink in VirtualBox you will likely encounter an error if you
+attempt to use VirtualBox's "Shared Folder" feature. You can copy the image you wish to
+shrink on to the VM from a Shared Folder, but shrinking directctly from the Shared Folder
+is know to cause issues.
 
 If using Ubuntu, you will likely see an error about `e2fsck` being out of date and `metadata_csum`. The simplest fix for this is to use Ubuntu 16.10 and up, as it will save you a lot of hassle in the long run.
 
 ## Installation ##
+
 ```bash
 wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
 chmod +x pishrink.sh
@@ -41,6 +48,7 @@ sudo mv pishrink.sh /usr/local/bin
 ```
 
 ## Example ##
+
 ```bash
 [user@localhost PiShrink]$ sudo pishrink.sh pi.img
 e2fsck 1.42.9 (28-Dec-2013)
@@ -65,6 +73,7 @@ Shrunk pi.img from 30G to 3.1G
 ```
 
 ## Contributing ##
+
 If you find a bug please create an issue for it. If you would like a new feature added, you can create an issue for it but I can't promise that I will get to it.
 
 Pull requests for new features and bug fixes are more than welcome!
