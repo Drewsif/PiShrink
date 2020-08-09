@@ -8,9 +8,9 @@ MYNAME="${SCRIPTNAME%.*}"
 LOGFILE="${CURRENT_DIR}/${SCRIPTNAME%.*}.log"
 REQUIRED_TOOLS="parted losetup tune2fs md5sum e2fsck resize2fs"
 ZIPTOOLS=("gzip xz")
-declare -A ZIP_PARALLEL_TOOL=( [gzip]="pigz" [xz]="xz" ) # parallel zip tool to use in parallel mode
-declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f9" [xz]="-T0" ) # options for zip tools in parallel mode
-declare -A ZIPEXTENSIONS=( [gzip]="gz" [xz]="xz" ) # extensions of zipped files
+declare -A ZIP_PARALLEL_TOOL=( [gzip]="pigz" [xz]="xz" ) # Parallel zip tool to use in parallel mode
+declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f" [xz]="-T0" ) # Options for zip tools in parallel mode
+declare -A ZIPEXTENSIONS=( [gzip]="gz" [xz]="xz" ) # Extensions of zipped files
 
 function info() {
 	echo "$SCRIPTNAME: $1 ..."
@@ -160,9 +160,12 @@ Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
   -s         Don't expand filesystem when image is booted the first time
   -v         Be verbose
   -r         Use advanced filesystem repair option if the normal one fails
-  -z         Compress image after shrinking with gzip
-  -Z         Compress image after shrinking with xz
+  -z         Compress image after shrinking with gzip (Default is balanced (6) compression)
+  -Z         Compress image after shrinking with xz (Default is balanced (6) compression)
   -a         Compress image in parallel using multiple cores
+  -c         Change the compression level from the default, balanced (6) to fast (1 for gzip, 0 or xz)
+  -C         Change the compression level from the default, balanced (6) to best (9)
+  -e         Compress image in extreme mode (Only applicable to xz compression)
   -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
   -d         Write debug messages in a debug log file
 EOM
@@ -171,17 +174,22 @@ EOM
 }
 
 should_skip_autoexpand=false
+compression=6
 debug=false
+extreme=false
 repair=false
 parallel=false
 verbose=false
 prep=false
 ziptool=""
 
-while getopts ":adhprsvzZ" opt; do
+while getopts ":acCdehprsvzZ" opt; do
   case "${opt}" in
     a) parallel=true;;
+	c) compression=0;;
+	C) compression=9;;
     d) debug=true;;
+    e) extreme=true;;
     h) help;;
     p) prep=true;;
     r) repair=true;;
@@ -194,6 +202,10 @@ while getopts ":adhprsvzZ" opt; do
 done
 shift $((OPTIND-1))
 
+if [ $compression == 0 ] && [[ "$ziptool" == "gzip" ]]; then
+	compression=1
+fi
+
 if [ "$debug" = true ]; then
 	info "Creating log file $LOGFILE"
 	rm "$LOGFILE" &>/dev/null
@@ -203,11 +215,11 @@ fi
 
 echo "${0##*/} $version"
 
-#Args
+# Args
 src="$1"
 img="$1"
 
-#Usage checks
+# Usage checks
 if [[ -z "$img" ]]; then
   help
 fi
@@ -221,7 +233,7 @@ if (( EUID != 0 )); then
   exit 3
 fi
 
-# check selected compression tool is supported and installed
+# Check selected compression tool is supported and installed
 if [[ -n $ziptool ]]; then
 	if [[ ! " ${ZIPTOOLS[@]} " =~ $ziptool ]]; then
 		error $LINENO "$ziptool is an unsupported ziptool."
@@ -235,7 +247,7 @@ if [[ -n $ziptool ]]; then
 	fi
 fi
 
-#Check that what we need is installed
+# Check that what we need is installed
 for command in $REQUIRED_TOOLS; do
   command -v $command >/dev/null 2>&1
   if (( $? != 0 )); then
@@ -244,10 +256,10 @@ for command in $REQUIRED_TOOLS; do
   fi
 done
 
-#Copy to new file if requested
+# Copy to new file if requested
 if [ -n "$2" ]; then
   f="$2"
-  if [[ -n $ziptool && "${f##*.}" == "${ZIPEXTENSIONS[$ziptool]}" ]]; then	# remove zip extension if zip requested because zip tool will complain about extension
+  if [[ -n $ziptool && "${f##*.}" == "${ZIPEXTENSIONS[$ziptool]}" ]]; then	# Remove zip extension if zip requested because zip tool will complain about extension
     f="${f%.*}"
   fi
   info "Copying $1 to $f..."
@@ -261,10 +273,10 @@ if [ -n "$2" ]; then
   img="$f"
 fi
 
-# cleanup at script exit
+# Cleanup at script exit
 trap cleanup EXIT
 
-#Gather info
+# Gather info
 info "Gathering data"
 beforesize="$(ls -lh "$img" | cut -d ' ' -f 5)"
 parted_output="$(parted -ms "$img" unit B print)"
@@ -295,7 +307,7 @@ blocksize="$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d '
 
 logVariables $LINENO beforesize parted_output partnum partstart parttype tune2fs_output currentsize blocksize
 
-#Check if we should make pi expand rootfs on next boot
+# Check if we should make pi expand rootfs on next boot
 if [ "$parttype" == "logical" ]; then
   echo "WARNING: PiShrink does not yet support autoexpanding of this type of image"
 elif [ "$should_skip_autoexpand" = false ]; then
@@ -313,7 +325,7 @@ if [[ $prep == true ]]; then
 fi
 
 
-#Make sure filesystem is ok
+# Make sure filesystem is ok
 checkFilesystem
 
 if ! minsize=$(resize2fs -P "$loopback"); then
@@ -328,7 +340,7 @@ if [[ $currentsize -eq $minsize ]]; then
   exit 11
 fi
 
-#Add some free space to the end of the filesystem
+# Add some free space to the end of the filesystem
 extra_space=$(($currentsize - $minsize))
 logVariables $LINENO extra_space
 for space in 5000 1000 100; do
@@ -339,7 +351,7 @@ for space in 5000 1000 100; do
 done
 logVariables $LINENO minsize
 
-#Shrink filesystem
+# Shrink filesystem
 info "Shrinking filesystem"
 resize2fs -p "$loopback" $minsize
 rc=$?
@@ -353,7 +365,7 @@ if (( $rc )); then
 fi
 sleep 1
 
-#Shrink partition
+# Shrink partition
 partnewsize=$(($minsize * $blocksize))
 newpartend=$(($partstart + $partnewsize))
 logVariables $LINENO partnewsize newpartend
@@ -371,7 +383,7 @@ if (( $rc )); then
 	exit 14
 fi
 
-#Truncate the file
+# Truncate the file
 info "Shrinking image"
 endresult=$(parted -ms "$img" unit B print free)
 rc=$?
@@ -389,13 +401,15 @@ if (( $rc )); then
 	exit 16
 fi
 
-# handle compression
+# Handle the compression
 if [[ -n $ziptool ]]; then
 	options=""
 	envVarname="${MYNAME^^}_${ziptool^^}" # PISHRINK_GZIP or PISHRINK_XZ environment variables allow to override all options for gzip or xz
 	[[ $parallel == true ]] && options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
-	[[ -v $envVarname ]] && options="${!envVarname}" # if environment variable defined use these options
-	[[ $verbose == true ]] && options="$options -v" # add verbose flag if requested
+	[[ $compression != 6 ]] && options="$options -$compression" # Update the compression value if requested (default value is 6)
+	[[ "$ziptool" == "xz" ]] && [[ $extreme == true ]] && options="$options -e" # Add extreme flag if requested for xz
+	[[ -v $envVarname ]] && options="${!envVarname}" # If environment variables defined use these options
+	[[ $verbose == true ]] && options="$options -v" # Add verbose flag if requested
 
 	if [[ $parallel == true ]]; then
 		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
@@ -406,7 +420,7 @@ if [[ -n $ziptool ]]; then
 			exit 18
 		fi
 
-	else # sequential
+	else # Sequential
 		info "Using $ziptool on the shrunk image"
 		if ! $ziptool ${options} "$img"; then
 			rc=$?
@@ -414,6 +428,7 @@ if [[ -n $ziptool ]]; then
 			exit 19
 		fi
 	fi
+
 	img=$img.${ZIPEXTENSIONS[$ziptool]}
 fi
 
