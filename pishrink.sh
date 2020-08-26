@@ -308,7 +308,7 @@ if [[ $prep == true ]]; then
   info "Syspreping: Removing logs, apt archives, dhcp leases and ssh hostkeys"
   mountdir=$(mktemp -d)
   mount "$loopback" "$mountdir"
-  rm -rf "$mountdir/var/cache/apt/archives/*" "$mountdir/var/lib/dhcpcd5/*" "$mountdir/var/log/*" "$mountdir/var/tmp/*" "$mountdir/tmp/*" "$mountdir/etc/ssh/*_host_*"
+  rm -rvf $mountdir/var/cache/apt/archives/* $mountdir/var/lib/dhcpcd5/* $mountdir/var/log/* $mountdir/var/tmp/* $mountdir/tmp/* $mountdir/etc/ssh/*_host_*
   umount "$mountdir"
 fi
 
