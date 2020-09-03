@@ -78,14 +78,8 @@ function set_autoexpand() {
         return
     fi
 
-    if [[ -f "$mountdir/etc/rc.local" ]] && [[ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "1c579c7d5b4292fd948399b6ece39009" ]]; then
-      echo "Creating new /etc/rc.local"
-    if [ -f "$mountdir/etc/rc.local" ]; then
-        mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
-    fi
-
-    #####Do not touch the following lines#####
-cat <<\EOF1 > "$mountdir/etc/rc.local"
+    local new_rc_local=$(
+cat <<\EOF1
 #!/bin/bash
 do_expand_rootfs() {
   ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
@@ -146,8 +140,40 @@ if [[ -f /etc/rc.local.bak ]]; then
 fi
 exit 0
 EOF1
-    #####End no touch zone#####
-    chmod +x "$mountdir/etc/rc.local"
+)
+    if [[ ! -f "$mountdir/etc/rc.local" ]] || [[ "$(cat "$mountdir/etc/rc.local")" != "$new_rc_local" ]]; then
+      if [ -f "$mountdir/etc/rc.local" ]; then
+        if fgrep -q expand            "$mountdir/etc/rc.local" &&
+           fgrep -q /etc/rc.local     "$mountdir/etc/rc.local" &&
+           fgrep -q /etc/rc.local.bak "$mountdir/etc/rc.local"
+        then
+            info "Image already has autoexpander of different $MYNAME version: replacing autoexpander"
+            # In this case we replace /etc/rc.local but leave an existing rc.local.bak unchanged.
+        else
+          [ -e "$mountdir/etc/rc.local.bak" ] && mv -Tf "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local.bak.bak" &&
+            info "Found unexpected /etc/rc.local.bak - renamed to /etc/rc.local.bak.bak"
+          # Save original /etc/rc.local to be executed after expand.
+          if ! mv -Tf "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"; then
+              info "WARNING: autoexpand could not be installed."
+              umount "$mountdir"
+              return
+          fi
+        fi
+      else
+        # No original /etc/rc.local exists; ensure we leave with a rc.local.bak that does nothing.
+        [ -e "$mountdir/etc/rc.local.bak" ] && mv -Tf "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local.bak.bak" &&
+            info "Found unexpected /etc/rc.local.bak - renamed to /etc/rc.local.bak.bak"
+      fi
+
+      info "Creating new /etc/rc.local"
+      echo "$new_rc_local" > "$mountdir/etc/rc.local"
+      chmod +x "$mountdir/etc/rc.local"
+
+      # If no /etc/rc.local.bak exists, create one that does nothing.
+      if [ ! -e "$mountdir/etc/rc.local.bak" ]; then
+        cp /dev/null "$mountdir/etc/rc.local.bak"
+        chmod +x "$mountdir/etc/rc.local.bak"
+      fi
     fi
     umount "$mountdir"
 }
