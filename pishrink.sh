@@ -81,6 +81,7 @@ function set_autoexpand() {
     local new_rc_local=$(
 cat <<\EOF1
 #!/bin/bash
+[ -f /boot/cmdline.txt.pishrink-bak ] && mv -fT /boot/cmdline.txt.pishrink-bak /boot/cmdline.txt
 do_expand_rootfs() {
   ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
 
@@ -175,7 +176,52 @@ EOF1
         chmod +x "$mountdir/etc/rc.local.bak"
       fi
     fi
+
+    # If rc.local is started by systemd it may fail to start if no console exists.
+    # Ensure a console is there until autoexpand was done:
+    boot_enable_console "$mountdir"
+
     umount "$mountdir"
+}
+
+function boot_enable_console () {
+
+  local fsroot="$1"
+  local bootstart="$(echo "$parted_output" | grep '^1:' | cut -d ':' -f 2 | tr -d 'B')"
+  local boot bootloop bootroot
+  local SEDCMDS='s/console=null/console=tty0/'
+
+  if [ -z "$fsroot" -o "x$bootstart" != "x$partstart" ]
+  then
+    bootloop="$(losetup -f --show -o "$bootstart" "$img")"
+    bootroot="$(mktemp -d)"
+    partprobe "$bootloop"
+    mount "$bootloop" "$bootroot"
+    boot="$bootroot"
+  else
+    boot="$fsroot/boot"
+  fi
+
+  logVariables $LINENO fsroot bootstart bootloop bootroot boot
+
+  if grep -q console=null "$boot/cmdline.txt" ; then
+    info "/boot/cmdline.txt changed to temporarily enable console for autoexpand"
+    cp -p "$boot/cmdline.txt" "$boot/cmdline.txt.pishrink-bak"
+    sed -i "$boot/cmdline.txt" -e "$SEDCMDS"
+  else
+    # ok, already enabled. If a backup exists, it was done by us; check if the backup is stil valid.
+    if [ -f "$boot/cmdline.txt.pishrink-bak" ]; then
+      if [ "$(sed "$boot/cmdline.txt.pishrink-bak" -e "$SEDCMDS")" = "$(cat "$boot/cmdline.txt")" ]; then
+        info "/boot/cmdline.txt already changed to temporarily enable console for autoexpand"
+      else
+        # console was enabled by design - not by us. Remove backup to prevent installing it.
+        rm -f "$boot/cmdline.txt.pishrink-bak"
+      fi
+    fi
+  fi
+
+  [ -n "$bootroot" ] && umount "$bootroot"
+  [ -n "$bootloop" ] && losetup -d "$bootloop"
 }
 
 help() {
