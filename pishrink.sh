@@ -189,7 +189,7 @@ function boot_enable_console () {
   local fsroot="$1"
   local bootstart="$(echo "$parted_output" | grep '^1:' | cut -d ':' -f 2 | tr -d 'B')"
   local boot bootloop bootroot
-  local SEDCMDS='s/console=null/console=tty0/'
+  local SEDCMDS='s/console=\(none\|null\)/console=tty0/'
 
   if [ -z "$fsroot" -o "x$bootstart" != "x$partstart" ]
   then
@@ -204,7 +204,7 @@ function boot_enable_console () {
 
   logVariables $LINENO fsroot bootstart bootloop bootroot boot
 
-  if grep -q console=null "$boot/cmdline.txt" ; then
+  if grep -q 'console=\(none\|null\)' "$boot/cmdline.txt" ; then
     info "/boot/cmdline.txt changed to temporarily enable console for autoexpand"
     cp -p "$boot/cmdline.txt" "$boot/cmdline.txt.pishrink-bak"
     sed -i "$boot/cmdline.txt" -e "$SEDCMDS"
