@@ -167,7 +167,6 @@ exit 0
 EOF1
 
 sed -i "s#BOOTHOOKFILE#$boothook#g; s#RCLOCAL#$rclocal#g" $mountdir$boothook
-cat $mountdir$boothook | grep RCLOCAL
     	#####End no touch zone#####
 			chmod +x "$mountdir$boothook"
     fi
