@@ -43,9 +43,14 @@ If using Ubuntu, you will likely see an error about `e2fsck` being out of date a
 
 ## Installation ##
 
+Download the script and make it executable.
 ```bash
 wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
 chmod +x pishrink.sh
+```
+Now move the script to a directory, wich is in your PATH variable.
+If you do not do that, you have to use the full path to execute this script.
+```bash
 sudo mv pishrink.sh /usr/local/bin
 ```
 
