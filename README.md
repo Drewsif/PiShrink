@@ -32,6 +32,25 @@ If you specify the `newimagefile.img` parameter, the script will make a copy of 
 
 Default options for compressors can be overwritten by defining PISHRINK_GZIP or PSHRINK_XZ environment variables for gzip and xz.
 
+## Running with Docker (e.g. MacOS is not supported directly) ##
+
+You can use [PiShrink dockerized](https://hub.docker.com/r/mgomesborges/pishrink)
+
+1. Install Docker Desktop on Mac
+
+1. Make a copy of a Raspberry Pi SD card that you want to shrink (see instructions here).
+
+1. Using the Terminal, access the directory containing the Raspberry Pi image: ```cd ~/Directory-with-RPi-image```
+
+1. Run PiShrink dockerized:
+
+```
+docker run --privileged=true --rm \
+    --volume $(pwd):/workdir \
+    mgomesborges/pishrink \
+    pishrink -pZv IMAGE_NAME.img NEW-IMAGE_NAME.img
+```
+
 ## Prerequisites ##
 
 If you are running PiShrink in VirtualBox you will likely encounter an error if you
