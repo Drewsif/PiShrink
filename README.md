@@ -16,7 +16,7 @@ Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
   -z         Compress image after shrinking with gzip
   -Z         Compress image after shrinking with xz
   -a         Compress image in parallel using multiple cores
-  -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
+  -p         Remove logs, apt archives, dhcp leases, ssh hostkeys and users bash history
   -d         Write debug messages in a debug log file
 ```
 
@@ -28,6 +28,7 @@ If you specify the `newimagefile.img` parameter, the script will make a copy of 
 * `-z` will compress the image after shrinking using gzip. `.gz` extension will be added to the filename.
 * `-Z` will compress the image after shrinking using xz. `.xz` extension will be added to the filename.
 * `-a` will use option -f9 for pigz and option -T0 for xz and compress in parallel.
+* `-p` will remove logs, apt archives, dhcp leases, ssh hostkeys and users bash history.
 * `-d` will create a logfile `pishrink.log` which may help for problem analysis.
 
 Default options for compressors can be overwritten by defining PISHRINK_GZIP or PSHRINK_XZ environment variables for gzip and xz.
