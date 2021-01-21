@@ -2,7 +2,7 @@
 # PiShrink #
 
 PiShrink is a bash script that automatically shrink a pi image that will then resize to the max size of the SD card on boot. This will make putting the image back onto the SD card faster and the shrunk images will compress better.
-In addition the shrinked image can be compressed with gzip and xz to create an even smaller image. Parallel compression of the image
+In addition the shrunk image can be compressed with gzip and xz to create an even smaller image. Parallel compression of the image
 using multiple cores is supported.
 
 ## Usage ##
@@ -24,7 +24,7 @@ If you specify the `newimagefile.img` parameter, the script will make a copy of 
 
 * `-s` prevents automatic filesystem expansion on the images next boot
 * `-v` enables more verbose output
-* `-r` will attempt to repair the filesystem using aditional options if the normal repair fails
+* `-r` will attempt to repair the filesystem using additional options if the normal repair fails
 * `-z` will compress the image after shrinking using gzip. `.gz` extension will be added to the filename.
 * `-Z` will compress the image after shrinking using xz. `.xz` extension will be added to the filename.
 * `-a` will use option -f9 for pigz and option -T0 for xz and compress in parallel.
