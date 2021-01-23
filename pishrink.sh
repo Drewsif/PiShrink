@@ -17,7 +17,7 @@ function info() {
 }
 
 function error() {
-	echo -n "$SCRIPTNAME: ERROR occured in line $1: "
+	echo -n "$SCRIPTNAME: ERROR occurred in line $1: "
 	shift
 	echo "$@"
 }
