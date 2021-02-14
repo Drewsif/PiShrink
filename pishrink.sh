@@ -165,6 +165,7 @@ Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
   -a         Compress image in parallel using multiple cores
   -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
   -d         Write debug messages in a debug log file
+             Export variable PISHRINK_GZIP or PISHRINK_XZ to overwrite default gzip or xz options 
 EOM
 	echo "$help"
 	exit 1
