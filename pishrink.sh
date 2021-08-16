@@ -221,6 +221,14 @@ if (( EUID != 0 )); then
   exit 3
 fi
 
+# set locale to POSIX(English) temporarily
+# these locale settings only affect the script and its sub processes
+
+export LANGUAGE=POSIX
+export LC_ALL=POSIX
+export LANG=POSIX
+
+
 # check selected compression tool is supported and installed
 if [[ -n $ziptool ]]; then
 	if [[ ! " ${ZIPTOOLS[@]} " =~ $ziptool ]]; then
