@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version="v0.1.3"
+version="v0.1.2"
 
 CURRENT_DIR="$(pwd)"
 SCRIPTNAME="${0##*/}"
@@ -17,7 +17,7 @@ function info() {
 }
 
 function error() {
-	echo -n "$SCRIPTNAME: ERROR occured in line $1: "
+	echo -n "$SCRIPTNAME: ERROR occurred in line $1: "
 	shift
 	echo "$@"
 }
@@ -62,8 +62,43 @@ if [[ $repair == true ]]; then
 	(( $? < 4 )) && return
 fi
 	error $LINENO "Filesystem recoveries failed. Giving up..."
-	exit -9
+	exit 9
 
+}
+
+function set_autoexpand() {
+    #Make pi expand rootfs on next boot
+    mountdir=$(mktemp -d)
+    partprobe "$loopback"
+    mount "$loopback" "$mountdir"
+
+    if [ ! -d "$mountdir/etc" ]; then
+        info "/etc not found, autoexpand will not be enabled"
+        umount "$mountdir"
+        return
+    fi
+
+    cat <<EOF > "$mountdir/etc/init.d/expand-rootfs" &&
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides: expand-rootfs
+# Required-Start:
+# Required-Stop:
+# Default-Start: 3
+# Default-Stop:
+# Short-Description: Expands the root filesystem to fill device size
+# Description:
+### END INIT INFO
+/usr/bin/env raspi-config --expand-rootfs
+update-rc.d expand-rootfs remove
+rm /etc/init.d/expand-rootfs
+reboot
+exit 0
+EOF
+
+    chmod +x "$mountdir/etc/init.d/expand-rootfs"
+    ln -s "../init.d/expand-rootfs" "$mountdir/etc/rc3.d/S01expand-rootfs" # Equivalent to update-rc.d expand-rootfs defaults
+    umount "$mountdir"
 }
 
 help() {
@@ -72,7 +107,7 @@ help() {
 Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
-  -v			 Be verbose
+  -v         Be verbose
   -r         Use advanced filesystem repair option if the normal one fails
   -z         Compress image after shrinking with gzip
   -Z         Compress image after shrinking with xz
@@ -81,7 +116,7 @@ Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
   -d         Write debug messages in a debug log file
 EOM
 	echo "$help"
-	exit -1
+	exit 1
 }
 
 should_skip_autoexpand=false
@@ -91,7 +126,6 @@ parallel=false
 verbose=false
 prep=false
 ziptool=""
-required_tools="$REQUIRED_TOOLS"
 
 while getopts ":adhprsvzZ" opt; do
   case "${opt}" in
@@ -129,20 +163,28 @@ fi
 
 if [[ ! -f "$img" ]]; then
   error $LINENO "$img is not a file..."
-  exit -2
+  exit 2
 fi
 if (( EUID != 0 )); then
   error $LINENO "You need to be running as root."
-  exit -3
+  exit 3
 fi
+
+# set locale to POSIX(English) temporarily
+# these locale settings only affect the script and its sub processes
+
+export LANGUAGE=POSIX
+export LC_ALL=POSIX
+export LANG=POSIX
+
 
 # check selected compression tool is supported and installed
 if [[ -n $ziptool ]]; then
-	if [[ ! " ${ZIPTOOLS[@]} " =~ " $ziptool " ]]; then
+	if [[ ! " ${ZIPTOOLS[@]} " =~ $ziptool ]]; then
 		error $LINENO "$ziptool is an unsupported ziptool."
-		exit -17
+		exit 17
 	else
-		if [[ $parallel == true && ziptool == "gzip" ]]; then
+		if [[ $parallel == true && $ziptool == "gzip" ]]; then
 			REQUIRED_TOOLS="$REQUIRED_TOOLS pigz"
 		else
 			REQUIRED_TOOLS="$REQUIRED_TOOLS $ziptool"
@@ -155,25 +197,29 @@ for command in $REQUIRED_TOOLS; do
   command -v $command >/dev/null 2>&1
   if (( $? != 0 )); then
     error $LINENO "$command is not installed."
-    exit -4
+    exit 4
   fi
 done
 
 #Copy to new file if requested
 if [ -n "$2" ]; then
-  info "Copying $1 to $2..."
-  cp --reflink=auto --sparse=always "$1" "$2"
+  f="$2"
+  if [[ -n $ziptool && "${f##*.}" == "${ZIPEXTENSIONS[$ziptool]}" ]]; then	# remove zip extension if zip requested because zip tool will complain about extension
+    f="${f%.*}"
+  fi
+  info "Copying $1 to $f..."
+  cp --reflink=auto --sparse=always "$1" "$f"
   if (( $? != 0 )); then
     error $LINENO "Could not copy file..."
-    exit -5
+    exit 5
   fi
   old_owner=$(stat -c %u:%g "$1")
-  chown "$old_owner" "$2"
-  img="$2"
+  chown "$old_owner" "$f"
+  img="$f"
 fi
 
 # cleanup at script exit
-trap cleanup ERR EXIT
+trap cleanup EXIT
 
 #Gather info
 info "Gathering data"
@@ -183,53 +229,34 @@ rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	info "Possibly invalid image. Run 'parted $img unit B print' manually to investigate"
-	exit -6
+	exit 6
 fi
 partnum="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 1)"
 partstart="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')"
+if [ -z "$(parted -s "$img" unit B print | grep "$partstart" | grep logical)" ]; then
+    parttype="primary"
+else
+    parttype="logical"
+fi
 loopback="$(losetup -f --show -o "$partstart" "$img")"
 tune2fs_output="$(tune2fs -l "$loopback")"
+rc=$?
+if (( $rc )); then
+    echo "$tune2fs_output"
+    error $LINENO "tune2fs failed. Unable to shrink this type of image"
+    exit 7
+fi
+
 currentsize="$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)"
 blocksize="$(echo "$tune2fs_output" | grep '^Block size:' | tr -d ' ' | cut -d ':' -f 2)"
 
-logVariables $LINENO beforesize parted_output partnum partstart tune2fs_output currentsize blocksize
+logVariables $LINENO beforesize parted_output partnum partstart parttype tune2fs_output currentsize blocksize
 
 #Check if we should make pi expand rootfs on next boot
-if [ "$should_skip_autoexpand" = false ]; then
-  #Make pi expand rootfs on next boot
-  mountdir=$(mktemp -d)
-  mount "$loopback" "$mountdir"
-  #From https://raw.githubusercontent.com/RPi-Distro/pi-gen/master/stage2/01-sys-tweaks/files/resize2fs_once
-  cat <<\EOF > "$mountdir/etc/init.d/resize2fs_once"
-#!/bin/sh
-### BEGIN INIT INFO
-# Provides:          resize2fs_once
-# Required-Start:
-# Required-Stop:
-# Default-Start: 3
-# Default-Stop:
-# Short-Description: Resize the root filesystem to fill partition
-# Description:
-### END INIT INFO
-. /lib/lsb/init-functions
-case "$1" in
-  start)
-    log_daemon_msg "Starting resize2fs_once"
-    ROOT_DEV=$(findmnt / -o source -n) &&
-    resize2fs $ROOT_DEV &&
-    update-rc.d resize2fs_once remove &&
-    rm /etc/init.d/resize2fs_once &&
-    log_end_msg $?
-    ;;
-  *)
-    echo "Usage: $0 start" >&2
-    exit 3
-    ;;
-esac
-EOF
-  chmod +x "$mountdir/etc/init.d/resize2fs_once"
-  ln -s "$mountdir/etc/init.d/resize2fs_once" "$mountdir/etc/rc3.d/resize2fs_once"
-  umount "$mountdir"
+if [ "$parttype" == "logical" ]; then
+  echo "WARNING: PiShrink does not yet support autoexpanding of this type of image"
+elif [ "$should_skip_autoexpand" = false ]; then
+  set_autoexpand
 else
   echo "Skipping autoexpanding process..."
 fi
@@ -238,7 +265,7 @@ if [[ $prep == true ]]; then
   info "Syspreping: Removing logs, apt archives, dhcp leases and ssh hostkeys"
   mountdir=$(mktemp -d)
   mount "$loopback" "$mountdir"
-  rm -rf "$mountdir/var/cache/apt/archives/*" "$mountdir/var/lib/dhcpcd5/*" "$mountdir/var/log/*" "$mountdir/var/tmp/*" "$mountdir/tmp/*" "$mountdir/etc/ssh/*_host_*"
+  rm -rvf $mountdir/var/cache/apt/archives/* $mountdir/var/lib/dhcpcd5/* $mountdir/var/log/* $mountdir/var/tmp/* $mountdir/tmp/* $mountdir/etc/ssh/*_host_*
   umount "$mountdir"
 fi
 
@@ -249,13 +276,13 @@ checkFilesystem
 if ! minsize=$(resize2fs -P "$loopback"); then
 	rc=$?
 	error $LINENO "resize2fs failed with rc $rc"
-	exit -10
+	exit 10
 fi
 minsize=$(cut -d ':' -f 2 <<< "$minsize" | tr -d ' ')
 logVariables $LINENO currentsize minsize
 if [[ $currentsize -eq $minsize ]]; then
   error $LINENO "Image already shrunk to smallest size"
-  exit -11
+  exit 11
 fi
 
 #Add some free space to the end of the filesystem
@@ -279,7 +306,7 @@ if (( $rc )); then
   mv "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local"
   umount "$mountdir"
   losetup -d "$loopback"
-  exit -12
+  exit 12
 fi
 sleep 1
 
@@ -291,14 +318,14 @@ parted -s -a minimal "$img" rm "$partnum"
 rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
-	exit -13
+	exit 13
 fi
 
-parted -s "$img" unit B mkpart primary "$partstart" "$newpartend"
+parted -s "$img" unit B mkpart "$parttype" "$partstart" "$newpartend"
 rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
-	exit -14
+	exit 14
 fi
 
 #Truncate the file
@@ -307,7 +334,7 @@ endresult=$(parted -ms "$img" unit B print free)
 rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
-	exit -15
+	exit 15
 fi
 
 endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
@@ -316,7 +343,7 @@ truncate -s "$endresult" "$img"
 rc=$?
 if (( $rc )); then
 	error $LINENO "trunate failed with rc $rc"
-	exit -16
+	exit 16
 fi
 
 # handle compression
@@ -326,22 +353,22 @@ if [[ -n $ziptool ]]; then
 	[[ $parallel == true ]] && options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
 	[[ -v $envVarname ]] && options="${!envVarname}" # if environment variable defined use these options
 	[[ $verbose == true ]] && options="$options -v" # add verbose flag if requested
-	
+
 	if [[ $parallel == true ]]; then
 		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
 		info "Using $parallel_tool on the shrunk image"
 		if ! $parallel_tool ${options} "$img"; then
 			rc=$?
 			error $LINENO "$parallel_tool failed with rc $rc"
-			exit -18
+			exit 18
 		fi
-		
+
 	else # sequential
 		info "Using $ziptool on the shrunk image"
-		if ! $ziptool ${options} $img; then
+		if ! $ziptool ${options} "$img"; then
 			rc=$?
 			error $LINENO "$ziptool failed with rc $rc"
-			exit -19
+			exit 19
 		fi
 	fi
 	img=$img.${ZIPEXTENSIONS[$ziptool]}
