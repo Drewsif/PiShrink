@@ -292,6 +292,8 @@ else
     parttype="logical"
 fi
 loopback="$(losetup -f --show -o "$partstart" "$img")"
+# Wait 3 seconds to ensure loopback is ready.
+sleep 3
 tune2fs_output="$(tune2fs -l "$loopback")"
 rc=$?
 if (( $rc )); then
