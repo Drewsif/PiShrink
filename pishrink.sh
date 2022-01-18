@@ -56,102 +56,108 @@ function checkFilesystem() {
 	e2fsck -y "$loopback"
 	(( $? < 4 )) && return
 
-if [[ $repair == true ]]; then
-	info "Trying to recover corrupted filesystem - Phase 2"
-	e2fsck -fy -b 32768 "$loopback"
-	(( $? < 4 )) && return
-fi
+	if [[ $repair == true ]]; then
+		info "Trying to recover corrupted filesystem - Phase 2"
+		e2fsck -fy -b 32768 "$loopback"
+		(( $? < 4 )) && return
+	fi
 	error $LINENO "Filesystem recoveries failed. Giving up..."
 	exit 9
 
 }
 
 function set_autoexpand() {
-    #Make pi expand rootfs on next boot
-    mountdir=$(mktemp -d)
-    partprobe "$loopback"
-    mount "$loopback" "$mountdir"
+	# Make pi expand root fs on next boot.
+	local mountdir=$(mktemp -d)
+	partprobe "$loopback"
+	mount "$loopback" "$mountdir"
 
-    if [ ! -d "$mountdir/etc" ]; then
-        info "/etc not found, autoexpand will not be enabled"
-        umount "$mountdir"
-        return
-    fi
+	if [ ! -d "$mountdir/etc" ]; then
+		info "/etc not found, autoexpand will not be enabled"
+		umount "$mountdir"
+		return
+	fi
 
-    if [[ -f "$mountdir/etc/rc.local" ]] && [[ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "1c579c7d5b4292fd948399b6ece39009" ]]; then
-      echo "Creating new /etc/rc.local"
-    if [ -f "$mountdir/etc/rc.local" ]; then
-        mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
-    fi
+	if [[ -f "$mountdir/etc/rc.local" ]] && [[ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "1c579c7d5b4292fd948399b6ece39009" ]]; then
+		echo "Creating new /etc/rc.local"
+		if [ -f "$mountdir/etc/rc.local" ]; then
+			if [ "$(awk 'FNR==2{print $1}' $mountdir/etc/rc.local)" != '#DONOTBACKUP' ]; then
+				# Creata a backup of rc.local if it's not marked.
+				mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
+			fi
+		fi
 
-    #####Do not touch the following lines#####
-cat <<\EOF1 > "$mountdir/etc/rc.local"
-#!/bin/bash
-do_expand_rootfs() {
-  ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
+		# Generate image's rc.local file to expand rootfs on first boot.
+		cat <<-RCLOCAL1 > "$mountdir/etc/rc.local"
+		#!/bin/bash
+		#DONOTBACKUP Prohibit pishrink.sh from creating backup to avoid boot looping.
+		SIZE=$newsize
+		
+		RCLOCAL1
 
-  if ! [[ "$ROOT_PART" =~ mmcblk.+ ]]; then
-    echo "$ROOT_PART is not an SD card. Don't know how to expand"
-    return 0
-  fi
+		cat <<-'RCLOCAL2' >> "$mountdir/etc/rc.local"
+		do_expand_rootfs() {
+			ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
 
-  PART_NUM=${ROOT_PART: -1}
-  DEV=$(ls /dev/mmcblk[0-9])
+			if ! [[ "$ROOT_PART" =~ mmcblk.+ ]]; then
+				echo "$ROOT_PART is not an SD card. Don't know how to expand"
+				return 0
+			fi
 
-  # Get the starting offset of the root partition
-  PART_START=$(parted $DEV -ms unit s p | grep "^${PART_NUM}" | cut -f 2 -d: | sed 's/[^0-9]//g')
-  [ "$PART_START" ] || return 1
-  # Return value will likely be error for fdisk as it fails to reload the
-  # partition table because the root fs is mounted
-  fdisk $DEV <<EOF
-p
-d
-$PART_NUM
-n
-p
-$PART_NUM
-$PART_START
+			PART_NUM=${ROOT_PART: -1}
+			DEV=$(ls /dev/mmcblk[0-9])
 
-p
-w
-EOF
+			# Get the starting offset of the root partition
+			PART_START=$(parted $DEV -ms unit s p | grep "^${PART_NUM}" | cut -f 2 -d: | sed 's/[^0-9]//g')
+			[ "$PART_START" ] || return 1
+			echo Root part $ROOT_PART, no. $PART_NUM, on $DEV, start $PART_START.
+			if [ -n "$SIZE" ]; then
+				echo Will resize root partition to $SIZE
+				SIZE=+$SIZE
+			else
+				echo Will resize root partition to maximum available.
+			fi
+			# Return value will likely be error for fdisk as it fails to reload the
+			# partition table because the root fs is mounted
+			fdisk $DEV <<-EOFDISK
+			p
+			d
+			$PART_NUM
+			n
+			p
+			$PART_NUM
+			$PART_START
+			$SIZE
+			p
+			w
+			EOFDISK
 
-cat <<EOF > /etc/rc.local &&
-#!/bin/sh
-echo "Expanding /dev/$ROOT_PART"
-resize2fs /dev/$ROOT_PART
-rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
+			cat <<-EOF > /etc/rc.local &&
+			#!/bin/sh
+			echo Expanding /dev/$ROOT_PART to ${SIZE:-maximum}
+			resize2fs /dev/$ROOT_PART $SIZE
+			rm -f /etc/rc.local
+			cp -f /etc/rc.local.bak /etc/rc.local
+			. /etc/rc.local
+			
+			EOF
+			reboot
+			exit
+		}
 
-EOF
-reboot
-exit
-}
-raspi_config_expand() {
-/usr/bin/env raspi-config --expand-rootfs
-if [[ $? != 0 ]]; then
-  return -1
-else
-  rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
-  reboot
-  exit
-fi
-}
-raspi_config_expand
-echo "WARNING: Using backup expand..."
-sleep 5
-do_expand_rootfs
-echo "ERROR: Expanding failed..."
-sleep 5
-if [[ -f /etc/rc.local.bak ]]; then
-  cp -f /etc/rc.local.bak /etc/rc.local
-  /etc/rc.local
-fi
-exit 0
-EOF1
-    #####End no touch zone#####
-    chmod +x "$mountdir/etc/rc.local"
-    fi
-    umount "$mountdir"
+		echo Expanding root...
+		do_expand_rootfs
+		echo ERROR: Expanding failed! Revert to original rc.local...
+		if [ -f /etc/rc.local.bak ]; then
+			cp -f /etc/rc.local.bak /etc/rc.local
+			. /etc/rc.local
+		fi
+		exit 0
+		RCLOCAL2
+
+		chmod +x "$mountdir/etc/rc.local"
+	fi
+	umount "$mountdir"
 }
 
 help() {
@@ -159,6 +165,8 @@ help() {
 	read -r -d '' help << EOM
 Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
 
+  -e n       Expand to size "n" during first boot. See the "size" argument of
+             the resize2fs command. Example: "-e 5G".
   -s         Don't expand filesystem when image is booted the first time
   -v         Be verbose
   -r         Use advanced filesystem repair option if the normal one fails
@@ -172,6 +180,7 @@ EOM
 	exit 1
 }
 
+newsize=
 should_skip_autoexpand=false
 debug=false
 repair=false
@@ -180,8 +189,9 @@ verbose=false
 prep=false
 ziptool=""
 
-while getopts ":adhprsvzZ" opt; do
+while getopts ":ade:hprsvzZ" opt; do
   case "${opt}" in
+    e) newsize=$OPTARG;;
     a) parallel=true;;
     d) debug=true;;
     h) help;;
