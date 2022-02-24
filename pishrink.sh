@@ -12,14 +12,19 @@ declare -A ZIP_PARALLEL_TOOL=( [gzip]="pigz" [xz]="xz" ) # parallel zip tool to 
 declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f9" [xz]="-T0" ) # options for zip tools in parallel mode
 declare -A ZIPEXTENSIONS=( [gzip]="gz" [xz]="xz" ) # extensions of zipped files
 
+function k2m(){
+	# Convert KBytes to MBytes and print it.
+	printf "%'0.2f" $(bc<<<"scale=2;$1/1024")
+}
+
 function info() {
-	echo "$SCRIPTNAME: $1 ..."
+	echo "$1 ..."
 }
 
 function error() {
-	echo -n "$SCRIPTNAME: ERROR occurred in line $1: "
+	local line=$1
 	shift
-	echo "$@"
+	>&2 echo "ERROR (line $line):" $*
 }
 
 function cleanup() {
@@ -62,11 +67,11 @@ function checkFilesystem() {
 		(( $? < 4 )) && return
 	fi
 	error $LINENO "Filesystem recoveries failed. Giving up..."
-	exit 9
+	exit 19
 
 }
 
-function set_autoexpand() {
+function make_expand_rootfs() {
 	# Make pi expand root fs on next boot.
 	local mountdir=$(mktemp -d)
 	partprobe "$loopback"
@@ -78,130 +83,128 @@ function set_autoexpand() {
 		return
 	fi
 
-	if [[ -f "$mountdir/etc/rc.local" ]] && [[ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "1c579c7d5b4292fd948399b6ece39009" ]]; then
-		echo "Creating new /etc/rc.local"
-		if [ -f "$mountdir/etc/rc.local" ]; then
-			if [ "$(awk 'FNR==2{print $1}' $mountdir/etc/rc.local)" != '#DONOTBACKUP' ]; then
-				# Creata a backup of rc.local if it's not marked.
-				mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
-			fi
+	# Create a backup of rc.local if it's not marked.
+	if [ -f "$mountdir/etc/rc.local" ]; then
+		if [ "$(awk 'FNR==2{print $1}' $mountdir/etc/rc.local)" != '#DONOTBACKUP' ]; then
+			info "Backing up original /etc/rc.local."
+			mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
 		fi
-
-		# Generate image's rc.local file to expand rootfs on first boot.
-		cat <<-RCLOCAL1 > "$mountdir/etc/rc.local"
-		#!/bin/bash
-		#DONOTBACKUP Prohibit pishrink.sh from creating backup to avoid boot looping.
-		SIZE=$newsize
-		
-		RCLOCAL1
-
-		cat <<-'RCLOCAL2' >> "$mountdir/etc/rc.local"
-		do_expand_rootfs() {
-			ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
-
-			if ! [[ "$ROOT_PART" =~ mmcblk.+ ]]; then
-				echo "$ROOT_PART is not an SD card. Don't know how to expand"
-				return 0
-			fi
-
-			PART_NUM=${ROOT_PART: -1}
-			DEV=$(ls /dev/mmcblk[0-9])
-
-			# Get the starting offset of the root partition
-			PART_START=$(parted $DEV -ms unit s p | grep "^${PART_NUM}" | cut -f 2 -d: | sed 's/[^0-9]//g')
-			[ "$PART_START" ] || return 1
-			echo Root part $ROOT_PART, no. $PART_NUM, on $DEV, start $PART_START.
-			if [ -n "$SIZE" ]; then
-				echo Will resize root partition to $SIZE
-				SIZE=+$SIZE
-			else
-				echo Will resize root partition to maximum available.
-			fi
-			# Return value will likely be error for fdisk as it fails to reload the
-			# partition table because the root fs is mounted
-			fdisk $DEV <<-EOFDISK
-			p
-			d
-			$PART_NUM
-			n
-			p
-			$PART_NUM
-			$PART_START
-			$SIZE
-			p
-			w
-			EOFDISK
-
-			cat <<-EOF > /etc/rc.local &&
-			#!/bin/sh
-			echo Expanding /dev/$ROOT_PART to ${SIZE:-maximum}
-			resize2fs /dev/$ROOT_PART $SIZE
-			rm -f /etc/rc.local
-			cp -f /etc/rc.local.bak /etc/rc.local
-			. /etc/rc.local
-			
-			EOF
-			reboot
-			exit
-		}
-
-		echo Expanding root...
-		do_expand_rootfs
-		echo ERROR: Expanding failed! Revert to original rc.local...
-		if [ -f /etc/rc.local.bak ]; then
-			cp -f /etc/rc.local.bak /etc/rc.local
-			. /etc/rc.local
-		fi
-		exit 0
-		RCLOCAL2
-
-		chmod +x "$mountdir/etc/rc.local"
 	fi
+
+	# Generate image's rc.local file to expand rootfs on first boot.
+	info "Generating /etc/rc.local to expand rootfs on first boot."
+	cat <<-RCLOCAL1 > "$mountdir/etc/rc.local"
+	#!/bin/bash
+	#DONOTBACKUP Prohibit pishrink.sh from creating backup to avoid boot looping.
+	SIZE=$newsize
+	
+	RCLOCAL1
+
+	cat <<-'RCLOCAL2' >> "$mountdir/etc/rc.local"
+	do_expand_rootfs() {
+		ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
+
+		if ! [[ "$ROOT_PART" =~ mmcblk.+ ]]; then
+			echo "$ROOT_PART is not an SD card. Don't know how to expand"
+			return 0
+		fi
+
+		PART_NUM=${ROOT_PART: -1}
+		DEV=$(ls /dev/mmcblk[0-9])
+
+		# Get the starting offset of the root partition
+		PART_START=$(parted $DEV -ms unit s p | grep "^${PART_NUM}" | cut -f 2 -d: | sed 's/[^0-9]//g')
+		[ "$PART_START" ] || return 1
+		echo Root part $ROOT_PART, no. $PART_NUM, on $DEV, start $PART_START.
+		if [ -n "$SIZE" ]; then
+			echo Will resize root partition to $SIZE
+			SIZE=+$SIZE
+		else
+			echo Will resize root partition to maximum available.
+		fi
+		# Return value will likely be error for fdisk as it fails to reload the
+		# partition table because the root fs is mounted
+		fdisk $DEV <<-EOFDISK
+		p
+		d
+		$PART_NUM
+		n
+		p
+		$PART_NUM
+		$PART_START
+		$SIZE
+		p
+		w
+		EOFDISK
+
+		cat <<-EOF > /etc/rc.local &&
+		#!/bin/sh
+		echo Expanding /dev/$ROOT_PART to ${SIZE:-maximum}
+		resize2fs /dev/$ROOT_PART $SIZE
+		rm -f /etc/rc.local
+		cp -f /etc/rc.local.bak /etc/rc.local
+		. /etc/rc.local
+		
+		EOF
+		reboot
+		exit
+	}
+
+	echo Expanding root...
+	do_expand_rootfs
+	echo ERROR: Expanding failed! Revert to original rc.local...
+	if [ -f /etc/rc.local.bak ]; then
+		cp -f /etc/rc.local.bak /etc/rc.local
+		. /etc/rc.local
+	fi
+	exit 0
+	RCLOCAL2
+
+	chmod +x "$mountdir/etc/rc.local"
 	umount "$mountdir"
 }
 
-help() {
-	local help
-	read -r -d '' help << EOM
-Usage: $0 [-adhrspvzZ] imagefile.img [newimagefile.img]
-
-  -e n       Expand to size "n" during first boot. See the "size" argument of
-             the resize2fs command. Example: "-e 5G".
-  -s         Don't expand filesystem when image is booted the first time
-  -v         Be verbose
-  -r         Use advanced filesystem repair option if the normal one fails
-  -z         Compress image after shrinking with gzip
-  -Z         Compress image after shrinking with xz
-  -a         Compress image in parallel using multiple cores
-  -p         Remove logs, apt archives, dhcp leases and ssh hostkeys
-  -d         Write debug messages in a debug log file
-EOM
-	echo "$help"
-	exit 1
+print_usage() {
+	cat <<-EOM
+	Usage: $0 [-adhrspvzZ] file [newfile]
+	Shrink and/or compress the given Linux image.
+	Options:
+	-d         Write debug messages in a debug log file
+	-l n       Limit size to expand the rootfs during first boot. See "size"
+	-p         Purge redudant files (logs, apt archives, dhcp leases...). See argument of the size2fs command. Ex: "-l 4.5G".
+	-r         Use advanced filesystem repair option if the normal one fails
+	-n         Don't expand filesystem when image is booted the first time
+	-z         Compress image after shrinking with gzip
+	-Z         Compress image after shrinking with xz
+	-a         Compress image in parallel using multiple cores
+	-v         Be verbose
+	EOM
+	exit 0
 }
 
 newsize=
-should_skip_autoexpand=false
+noexpand=false
 debug=false
 repair=false
 parallel=false
 verbose=false
-prep=false
+purge=false
 ziptool=""
 
-while getopts ":ade:hprsvzZ" opt; do
+while getopts "adhl:nprvzZ" opt; do
   case "${opt}" in
-    e) newsize=$OPTARG;;
     a) parallel=true;;
     d) debug=true;;
-    h) help;;
-    p) prep=true;;
+    h) print_usage;;
+    l) newsize=$OPTARG;;
+    n) noexpand=true ;;
+    p) purge=true;;
     r) repair=true;;
-    s) should_skip_autoexpand=true ;;
     v) verbose=true;;
     z) ziptool="gzip";;
     Z) ziptool="xz";;
-    *) help;;
+    \?) error "Invalid option \"$OPTARG\""; exit 1 ;;
+    :) error "ERROR: Option \"$OPTARG\" requires an argument."; exit 2 ;;
   esac
 done
 shift $((OPTIND-1))
@@ -221,16 +224,16 @@ img="$1"
 
 #Usage checks
 if [[ -z "$img" ]]; then
-  help
+  print_usage
 fi
 
 if [[ ! -f "$img" ]]; then
   error $LINENO "$img is not a file..."
-  exit 2
+  exit 3
 fi
 if (( EUID != 0 )); then
   error $LINENO "You need to be running as root."
-  exit 3
+  exit 4
 fi
 
 # set locale to POSIX(English) temporarily
@@ -240,12 +243,11 @@ export LANGUAGE=POSIX
 export LC_ALL=POSIX
 export LANG=POSIX
 
-
 # check selected compression tool is supported and installed
 if [[ -n $ziptool ]]; then
 	if [[ ! " ${ZIPTOOLS[@]} " =~ $ziptool ]]; then
 		error $LINENO "$ziptool is an unsupported ziptool."
-		exit 17
+		exit 5
 	else
 		if [[ $parallel == true && $ziptool == "gzip" ]]; then
 			REQUIRED_TOOLS="$REQUIRED_TOOLS pigz"
@@ -260,7 +262,7 @@ for command in $REQUIRED_TOOLS; do
   command -v $command >/dev/null 2>&1
   if (( $? != 0 )); then
     error $LINENO "$command is not installed."
-    exit 4
+    exit 6
   fi
 done
 
@@ -274,7 +276,7 @@ if [ -n "$2" ]; then
   cp --reflink=auto --sparse=always "$1" "$f"
   if (( $? != 0 )); then
     error $LINENO "Could not copy file..."
-    exit 5
+    exit 7
   fi
   old_owner=$(stat -c %u:%g "$1")
   chown "$old_owner" "$f"
@@ -292,7 +294,7 @@ rc=$?
 if (( $rc )); then
 	error $LINENO "parted failed with rc $rc"
 	info "Possibly invalid image. Run 'parted $img unit B print' manually to investigate"
-	exit 6
+	exit 8
 fi
 partnum="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 1)"
 partstart="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')"
@@ -309,7 +311,7 @@ rc=$?
 if (( $rc )); then
     echo "$tune2fs_output"
     error $LINENO "tune2fs failed. Unable to shrink this type of image"
-    exit 7
+    exit 9
 fi
 
 currentsize="$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)"
@@ -320,17 +322,24 @@ logVariables $LINENO beforesize parted_output partnum partstart parttype tune2fs
 #Check if we should make pi expand rootfs on next boot
 if [ "$parttype" == "logical" ]; then
   echo "WARNING: PiShrink does not yet support autoexpanding of this type of image"
-elif [ "$should_skip_autoexpand" = false ]; then
-  set_autoexpand
+elif [ "$noexpand" = false ]; then
+  make_expand_rootfs
 else
   echo "Skipping autoexpanding process..."
 fi
 
-if [[ $prep == true ]]; then
-  info "Syspreping: Removing logs, apt archives, dhcp leases and ssh hostkeys"
+if [[ $purge == true ]]; then
   mountdir=$(mktemp -d)
   mount "$loopback" "$mountdir"
-  rm -rvf $mountdir/var/cache/apt/archives/* $mountdir/var/lib/dhcpcd5/* $mountdir/var/log/* $mountdir/var/tmp/* $mountdir/tmp/* $mountdir/etc/ssh/*_host_*
+	purge_dirs="/var/cache/apt/archives /var/log /var/tmp /tmp"
+	total_purged=0
+	for d in $purge_dirs; do
+		let k=$(du -s ${mountdir}$d | awk '{print $1}')
+		let total_purged+=$k
+		info "Purging and save $(k2m $k) MBytes from $d"
+		rm -fr ${mountdir}$d/* > /dev/null
+	done
+	info "Total $(k2m $total_purged) MBytes was purged."
   umount "$mountdir"
 fi
 
@@ -425,7 +434,7 @@ if [[ -n $ziptool ]]; then
 		if ! $parallel_tool ${options} "$img"; then
 			rc=$?
 			error $LINENO "$parallel_tool failed with rc $rc"
-			exit 18
+			exit 17
 		fi
 
 	else # sequential
@@ -433,7 +442,7 @@ if [[ -n $ziptool ]]; then
 		if ! $ziptool ${options} "$img"; then
 			rc=$?
 			error $LINENO "$ziptool failed with rc $rc"
-			exit 19
+			exit 18
 		fi
 	fi
 	img=$img.${ZIPEXTENSIONS[$ziptool]}
