@@ -169,7 +169,7 @@ print_usage() {
 	Usage: $0 [-adhrspvzZ] file [newfile]
 	Shrink and/or compress the given Linux image.
 	Options:
-	-d         Write debug messages in a debug log file
+	-d         Write debug messages to pishrink.log in the working directory.
 	-e n       Add an extra n (default 100) megabytes to the shrunk image.
 	-l n       Limit size to expand the rootfs during first boot. See argument of the size2fs command. Ex: "-l 4.5G".
 	-p         Purge redudant files (logs, apt archives, dhcp leases...).
