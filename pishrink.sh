@@ -170,8 +170,9 @@ print_usage() {
 	Shrink and/or compress the given Linux image.
 	Options:
 	-d         Write debug messages in a debug log file
-	-l n       Limit size to expand the rootfs during first boot. See "size"
-	-p         Purge redudant files (logs, apt archives, dhcp leases...). See argument of the size2fs command. Ex: "-l 4.5G".
+	-e n       Add an extra n (default 100) megabytes to the shrunk image.
+	-l n       Limit size to expand the rootfs during first boot. See argument of the size2fs command. Ex: "-l 4.5G".
+	-p         Purge redudant files (logs, apt archives, dhcp leases...).
 	-r         Use advanced filesystem repair option if the normal one fails
 	-n         Don't expand filesystem when image is booted the first time
 	-z         Compress image after shrinking with gzip
@@ -183,6 +184,7 @@ print_usage() {
 }
 
 newsize=
+extraspace=100
 noexpand=false
 debug=false
 repair=false
@@ -191,8 +193,9 @@ verbose=false
 purge=false
 ziptool=""
 
-while getopts "adhl:nprvzZ" opt; do
+while getopts "e:adhl:nprvzZ" opt; do
   case "${opt}" in
+    e) extraspace=$OPTARG;;
     a) parallel=true;;
     d) debug=true;;
     h) print_usage;;
@@ -360,14 +363,7 @@ if [[ $currentsize -eq $minsize ]]; then
 fi
 
 #Add some free space to the end of the filesystem
-extra_space=$(($currentsize - $minsize))
-logVariables $LINENO extra_space
-for space in 5000 1000 100; do
-  if [[ $extra_space -gt $space ]]; then
-    minsize=$(($minsize + $space))
-    break
-  fi
-done
+minsize=$(($minsize + $extraspace * 1024**2 / $blocksize))
 logVariables $LINENO minsize
 
 #Shrink filesystem
