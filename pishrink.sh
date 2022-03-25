@@ -363,8 +363,14 @@ if [[ $currentsize -eq $minsize ]]; then
 fi
 
 #Add some free space to the end of the filesystem
-minsize=$(($minsize + $extraspace * 1024**2 / $blocksize))
-logVariables $LINENO minsize
+targetsize=$(($minsize + $extraspace * 1024**2 / $blocksize))
+if [ $targetsize -ge $currentsize ]; then
+	info "Target size ($targetsize) too large, force to current size minus 1"
+	let minsize=$currentsize-1
+else
+	minsize=$targetsize
+fi
+logVariables $LINENO targetsize currentsize minsize
 
 #Shrink filesystem
 info "Shrinking filesystem"
