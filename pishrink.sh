@@ -31,11 +31,6 @@ function cleanup() {
 	if losetup "$loopback" &>/dev/null; then
 		losetup -d "$loopback"
 	fi
-	if [ "$debug" = true ]; then
-		local old_owner=$(stat -c %u:%g "$src")
-		chown "$old_owner" "$LOGFILE"
-	fi
-
 }
 
 function logVariables() {
@@ -299,6 +294,7 @@ if (( $rc )); then
 	info "Possibly invalid image. Run 'parted $img unit B print' manually to investigate"
 	exit 8
 fi
+# Determine the last partition number and its starting block.
 partnum="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 1)"
 partstart="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')"
 if [ -z "$(parted -s "$img" unit B print | grep "$partstart" | grep logical)" ]; then
@@ -306,6 +302,7 @@ if [ -z "$(parted -s "$img" unit B print | grep "$partstart" | grep logical)" ];
 else
     parttype="logical"
 fi
+# Now mount the last partition as a loopback device..
 loopback="$(losetup -f --show -o "$partstart" "$img")"
 # Wait 3 seconds to ensure loopback is ready.
 sleep 3
@@ -358,72 +355,72 @@ fi
 minsize=$(cut -d ':' -f 2 <<< "$minsize" | tr -d ' ')
 logVariables $LINENO currentsize minsize
 if [[ $currentsize -eq $minsize ]]; then
-  error $LINENO "Image already shrunk to smallest size"
-  exit 11
-fi
-
-#Add some free space to the end of the filesystem
-targetsize=$(($minsize + $extraspace * 1024**2 / $blocksize))
-if [ $targetsize -ge $currentsize ]; then
-	info "Target size ($targetsize) too large, force to current size minus 1"
-	let minsize=$currentsize-1
+  info "Image already shrunk to smallest size"
 else
-	minsize=$targetsize
-fi
-logVariables $LINENO targetsize currentsize minsize
+	#Add some free space to the end of the filesystem
+	targetsize=$(($minsize + $extraspace * 1024**2 / $blocksize))
+	if [ $targetsize -ge $currentsize ]; then
+		info "Target size ($targetsize) too large, force to current size minus 1"
+		let minsize=$currentsize-1
+	else
+		minsize=$targetsize
+	fi
+	logVariables $LINENO targetsize currentsize minsize
 
-#Shrink filesystem
-info "Shrinking filesystem"
-resize2fs -p "$loopback" $minsize
-rc=$?
-if (( $rc )); then
-  error $LINENO "resize2fs failed with rc $rc"
-  mount "$loopback" "$mountdir"
-  mv "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local"
-  umount "$mountdir"
-  losetup -d "$loopback"
-  exit 12
-fi
-sleep 1
+	#Shrink filesystem
+	info "Shrinking filesystem"
+	resize2fs -p "$loopback" $minsize
+	rc=$?
+	if (( $rc )); then
+		error $LINENO "resize2fs failed with rc $rc"
+		mount "$loopback" "$mountdir"
+		mv "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local"
+		umount "$mountdir"
+		losetup -d "$loopback"
+		exit 12
+	fi
+	sleep 1
 
-#Shrink partition
-partnewsize=$(($minsize * $blocksize))
-newpartend=$(($partstart + $partnewsize))
-logVariables $LINENO partnewsize newpartend
-parted -s -a minimal "$img" rm "$partnum"
-rc=$?
-if (( $rc )); then
-	error $LINENO "parted failed with rc $rc"
-	exit 13
-fi
+	#Shrink partition
+	partnewsize=$(($minsize * $blocksize))
+	newpartend=$(($partstart + $partnewsize))
+	logVariables $LINENO partnewsize newpartend
+	parted -s -a minimal "$img" rm "$partnum"
+	rc=$?
+	if (( $rc )); then
+		error $LINENO "parted failed with rc $rc"
+		exit 13
+	fi
 
-parted -s "$img" unit B mkpart "$parttype" "$partstart" "$newpartend"
-rc=$?
-if (( $rc )); then
-	error $LINENO "parted failed with rc $rc"
-	exit 14
-fi
+	parted -s "$img" unit B mkpart "$parttype" "$partstart" "$newpartend"
+	rc=$?
+	if (( $rc )); then
+		error $LINENO "parted failed with rc $rc"
+		exit 14
+	fi
 
-#Truncate the file
-info "Shrinking image"
-endresult=$(parted -ms "$img" unit B print free)
-rc=$?
-if (( $rc )); then
-	error $LINENO "parted failed with rc $rc"
-	exit 15
-fi
+	#Truncate the file
+	info "Shrinking image"
+	endresult=$(parted -ms "$img" unit B print free)
+	rc=$?
+	if (( $rc )); then
+		error $LINENO "parted failed with rc $rc"
+		exit 15
+	fi
 
-endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
-logVariables $LINENO endresult
-truncate -s "$endresult" "$img"
-rc=$?
-if (( $rc )); then
-	error $LINENO "trunate failed with rc $rc"
-	exit 16
+	endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
+	logVariables $LINENO endresult
+	truncate -s "$endresult" "$img"
+	rc=$?
+	if (( $rc )); then
+		error $LINENO "trunate failed with rc $rc"
+		exit 16
+	fi
 fi
 
 # handle compression
 if [[ -n $ziptool ]]; then
+	info "Compressing"
 	options=""
 	envVarname="${MYNAME^^}_${ziptool^^}" # PISHRINK_GZIP or PISHRINK_XZ environment variables allow to override all options for gzip or xz
 	[[ $parallel == true ]] && options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
@@ -453,4 +450,5 @@ fi
 aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
 logVariables $LINENO aftersize
 
-info "Shrunk $img from $beforesize to $aftersize"
+info "Shrunk/compressed $img from $beforesize to $aftersize"
+ls -lh "$img"
