@@ -316,7 +316,12 @@ if [[ $prep == true ]]; then
   info "Syspreping: Removing logs, apt archives, dhcp leases and ssh hostkeys"
   mountdir=$(mktemp -d)
   mount "$loopback" "$mountdir"
-  rm -rvf $mountdir/var/cache/apt/archives/* $mountdir/var/lib/dhcpcd5/* $mountdir/var/log/* $mountdir/var/tmp/* $mountdir/tmp/* $mountdir/etc/ssh/*_host_*
+  rm -rvf $mountdir/var/cache/apt/archives/* $mountdir/var/lib/dhcpcd5/* $mountdir/var/log/* $mountdir/var/tmp/* $mountdir/tmp/*
+  if [[ -f "$mountdir/lib/systemd/system/regenerate_ssh_host_keys.service" ]] && [[ -d "$mountdir/etc/systemd/system/multi-user.target.wants" ]]; then
+    ln -s $mountdir/lib/systemd/system/regenerate_ssh_host_keys.service $mountdir/etc/systemd/system/multi-user.target.wants/regenerate_ssh_host_keys.service
+  else
+    info "could not locate key regeneration service, skipping keygen"
+  fi
   umount "$mountdir"
 fi
 
