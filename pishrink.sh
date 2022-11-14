@@ -331,7 +331,7 @@ if [[ $prep == true ]]; then
           dd if=/dev/hwrng of=/dev/urandom count=1 bs=4096 status=none
         fi
         rm -f $mountdir/etc/ssh/ssh_host_*_key*
-        ssh-keygen -A -f $mountdir/etc/ssh > /dev/null
+        ssh-keygen -A -f $mountdir > /dev/null
       fi
     fi
   #check if dropbear is enabled
