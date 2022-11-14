@@ -331,6 +331,7 @@ if [[ $prep == true ]]; then
           dd if=/dev/hwrng of=/dev/urandom count=1 bs=4096 status=none
         fi
         rm -f $mountdir/etc/ssh/ssh_host_*_key*
+        info "regenerating ssh host keys"
         ssh-keygen -A -f $mountdir > /dev/null
       fi
     fi
@@ -341,9 +342,10 @@ if [[ $prep == true ]]; then
       info "WARNING: could not locate dropbearkey command, keeping old keys"
     else
       rm -f $mountdir/etc/dropbear/dropbear_*_host_key
-      dropbearkey -t rsa -f $mountdir/etc/dropbear/dropbear_rsa_host_key
-      dropbearkey -t ecdsa -f $mountdir/etc/dropbear/dropbear_ecdsa_host_key
-      dropbearkey -t ed25519 -f $mountdir/etc/dropbear/dropbear_ed25519_host_key
+      info "regenerating dropbear keys"
+      dropbearkey -t rsa -f $mountdir/etc/dropbear/dropbear_rsa_host_key > /dev/null
+      dropbearkey -t ecdsa -f $mountdir/etc/dropbear/dropbear_ecdsa_host_key > /dev/null
+      dropbearkey -t ed25519 -f $mountdir/etc/dropbear/dropbear_ed25519_host_key > /dev/null 
     fi
   fi
   umount "$mountdir"
