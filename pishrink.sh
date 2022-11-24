@@ -132,6 +132,7 @@ if [[ $? != 0 ]]; then
   return -1
 else
   rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
+  bloom_reset()
   reboot
   exit
 fi
