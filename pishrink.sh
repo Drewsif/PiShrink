@@ -78,7 +78,7 @@ function set_autoexpand() {
         return
     fi
 
-    if [[ -f "$mountdir/etc/rc.local" ]] && [[ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "196b00c95212d896ac0c016c961d667a" ]]; then
+    if [[ -f "$mountdir/etc/rc.local" ]]; then
       echo "Creating new /etc/rc.local"
     if [ -f "$mountdir/etc/rc.local" ]; then
         mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
@@ -117,9 +117,6 @@ EOF
 cat <<EOF > /etc/rc.local &&
 #!/bin/sh
 
-sudo mount -o remount,rw /
-sudo mount -o remount,rw /boot
-
 echo "Expanding /dev/$ROOT_PART"
 resize2fs /dev/$ROOT_PART
 rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
@@ -131,9 +128,6 @@ exit
 raspi_config_expand() {
 /usr/bin/env raspi-config --expand-rootfs
 
-sudo mount -o remount,rw /
-sudo mount -o remount,rw /boot
-
 if [[ $? != 0 ]]; then
   return -1
 else
@@ -142,6 +136,11 @@ else
   exit
 fi
 }
+
+bloom_reset(){
+  /opt/qbetter/bin/bloom-setup reset
+}
+
 raspi_config_expand
 echo "WARNING: Using backup expand..."
 sleep 5
@@ -152,6 +151,7 @@ if [[ -f /etc/rc.local.bak ]]; then
   cp -f /etc/rc.local.bak /etc/rc.local
   /etc/rc.local
 fi
+bloom_reset()
 exit 0
 EOF1
     #####End no touch zone#####
