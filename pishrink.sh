@@ -132,7 +132,7 @@ if [[ $? != 0 ]]; then
   return -1
 else
   rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
-  bloom_reset()
+  bloom_reset
   reboot
   exit
 fi
@@ -152,7 +152,7 @@ if [[ -f /etc/rc.local.bak ]]; then
   cp -f /etc/rc.local.bak /etc/rc.local
   /etc/rc.local
 fi
-bloom_reset()
+bloom_reset
 exit 0
 EOF1
     #####End no touch zone#####
