@@ -119,7 +119,7 @@ cat <<EOF > /etc/rc.local &&
 
 echo "Expanding /dev/$ROOT_PART"
 resize2fs /dev/$ROOT_PART
-rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
+rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local
 
 EOF
 reboot
@@ -131,8 +131,7 @@ raspi_config_expand() {
 if [[ $? != 0 ]]; then
   return -1
 else
-  rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
-  bloom_reset
+  rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local
   reboot
   exit
 fi
@@ -150,9 +149,7 @@ echo "ERROR: Expanding failed..."
 sleep 5
 if [[ -f /etc/rc.local.bak ]]; then
   cp -f /etc/rc.local.bak /etc/rc.local
-  /etc/rc.local
 fi
-bloom_reset
 exit 0
 EOF1
     #####End no touch zone#####
