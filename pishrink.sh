@@ -84,30 +84,42 @@ function set_autoexpand() {
         return
     fi
 
-    if [[ -f "$mountdir/etc/rc.local" ]] && [[ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "1c579c7d5b4292fd948399b6ece39009" ]]; then
-      echo "Creating new /etc/rc.local"
-    if [ -f "$mountdir/etc/rc.local" ]; then
-        mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
-    fi
+		if ([[ -f "$mountdir/etc/rc.local" ]] && [[ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "1c579c7d5b4292fd948399b6ece39009" ]]); then
+			info "Creating new /etc/rc.local"
+			isok=1
+			rclocal=1
+			boothook=/etc/rc.local
+			if [ -f "$mountdir/etc/rc.local" ]; then
+					mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
+			fi
+		elif [[ -d "$mountdir/var/lib/dietpi/postboot.d" ]]; then
+			info "Using postboot hooks..."
+			isok=1
+			rclocal=0
+			boothook=/var/lib/dietpi/postboot.d/inflatefs.sh
+		fi
 
-    #####Do not touch the following lines#####
-cat <<\EOF1 > "$mountdir/etc/rc.local"
+    if [ "$isok" -eq "1" ]; then
+
+			#####Do not touch the following lines#####
+cat <<\EOF1 > "$mountdir$boothook"
 #!/bin/bash
 do_expand_rootfs() {
-  ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
+ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
+DEV_PART=$(echo "$ROOT_PART" | cut -f1 -d"p")
 
-  PART_NUM=${ROOT_PART#mmcblk0p}
-  if [ "$PART_NUM" = "$ROOT_PART" ]; then
-    echo "$ROOT_PART is not an SD card. Don't know how to expand"
-    return 0
-  fi
+PART_NUM=${ROOT_PART#"${DEV_PART}p"}
+if [ "$PART_NUM" = "$ROOT_PART" ]; then
+  echo "$ROOT_PART is not an SD card. Don't know how to expand"
+  return 0
+fi
 
-  # Get the starting offset of the root partition
-  PART_START=$(parted /dev/mmcblk0 -ms unit s p | grep "^${PART_NUM}" | cut -f 2 -d: | sed 's/[^0-9]//g')
-  [ "$PART_START" ] || return 1
-  # Return value will likely be error for fdisk as it fails to reload the
-  # partition table because the root fs is mounted
-  fdisk /dev/mmcblk0 <<EOF
+# Get the starting offset of the root partition
+PART_START=$(parted /dev/${DEV_PART} -ms unit s p | grep "^${PART_NUM}" | cut -f 2 -d: | sed 's/[^0-9]//g')
+[ "$PART_START" ] || return 1
+# Return value will likely be error for fdisk as it fails to reload the
+# partition table because the root fs is mounted
+fdisk /dev/${DEV_PART} <<EOF
 p
 d
 $PART_NUM
@@ -120,16 +132,20 @@ p
 w
 EOF
 
-cat <<EOF > /etc/rc.local &&
+cat <<EOF > BOOTHOOKFILE &&
 #!/bin/sh
 echo "Expanding /dev/$ROOT_PART"
 resize2fs /dev/$ROOT_PART
-rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
-
 EOF
+if [ "RCLOCAL" -eq "1" ]; then
+	echo "rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local" >> BOOTHOOKFILE
+else
+	echo "rm -f BOOTHOOKFILE" >> BOOTHOOKFILE
+fi
 reboot
 exit
 }
+
 raspi_config_expand() {
 /usr/bin/env raspi-config --expand-rootfs
 if [[ $? != 0 ]]; then
@@ -140,20 +156,25 @@ else
   exit
 fi
 }
+
 raspi_config_expand
 echo "WARNING: Using backup expand..."
 sleep 5
 do_expand_rootfs
 echo "ERROR: Expanding failed..."
 sleep 5
-if [[ -f /etc/rc.local.bak ]]; then
-  cp -f /etc/rc.local.bak /etc/rc.local
-  /etc/rc.local
+if [ "RCLOCAL" -eq "1" ]; then
+ if [[ -f /etc/rc.local.bak ]]; then
+ cp -f /etc/rc.local.bak /etc/rc.local
+ /etc/rc.local
+ fi
 fi
 exit 0
 EOF1
-    #####End no touch zone#####
-    chmod +x "$mountdir/etc/rc.local"
+
+sed -i "s#BOOTHOOKFILE#$boothook#g; s#RCLOCAL#$rclocal#g" $mountdir$boothook
+    	#####End no touch zone#####
+			chmod +x "$mountdir$boothook"
     fi
     umount "$mountdir"
 }
