@@ -17,7 +17,7 @@ Usage: $0 [-adhrsvzZ] imagefile.img [newimagefile.img]
   -Z         Compress image after shrinking with xz
   -a         Compress image in parallel using multiple cores
   -d         Write debug messages in a debug log file
-  -n         The first input is device, not file
+  -n         Accept an input that is not a file (e.g. a tf card)
 ```
 
 If you specify the `newimagefile.img` parameter, the script will make a copy of `imagefile.img` and work off that. You will need enough space to make a full copy of the image to use that option.
