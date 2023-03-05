@@ -8,7 +8,7 @@ using multiple cores is supported.
 ## Usage ##
 
 ```
-Usage: $0 [-adhrsvzZ] imagefile.img [newimagefile.img]
+Usage: $0 [-adhrsvzZn] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
   -v         Be verbose
