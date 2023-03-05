@@ -161,7 +161,7 @@ EOF1
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-adhrsvzZ] imagefile.img [newimagefile.img]
+Usage: $0 [-adhrsvzZn] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
   -v         Be verbose
@@ -170,6 +170,7 @@ Usage: $0 [-adhrsvzZ] imagefile.img [newimagefile.img]
   -Z         Compress image after shrinking with xz
   -a         Compress image in parallel using multiple cores
   -d         Write debug messages in a debug log file
+  -n         Accept an input that is not a file (e.g. a tf card)
 EOM
 	echo "$help"
 	exit 1
@@ -181,8 +182,9 @@ repair=false
 parallel=false
 verbose=false
 ziptool=""
+notfile=false
 
-while getopts ":adhrsvzZ" opt; do
+while getopts ":adhrsvzZn" opt; do
   case "${opt}" in
     a) parallel=true;;
     d) debug=true;;
@@ -192,6 +194,7 @@ while getopts ":adhrsvzZ" opt; do
     v) verbose=true;;
     z) ziptool="gzip";;
     Z) ziptool="xz";;
+    n) notfile=true;;
     *) help;;
   esac
 done
@@ -215,10 +218,14 @@ if [[ -z "$img" ]]; then
   help
 fi
 
-if [[ ! -f "$img" ]]; then
-  error $LINENO "$img is not a file..."
-  exit 2
+if [ "$notfile" = false ]; then
+  echo "$notfile"
+  if [[ ! -f "$img" ]]; then
+    error $LINENO "$img is not a file..."
+    exit 2
+  fi
 fi
+
 if (( EUID != 0 )); then
   error $LINENO "You need to be running as root."
   exit 3
@@ -257,19 +264,21 @@ done
 
 #Copy to new file if requested
 if [ -n "$2" ]; then
-  f="$2"
-  if [[ -n $ziptool && "${f##*.}" == "${ZIPEXTENSIONS[$ziptool]}" ]]; then	# remove zip extension if zip requested because zip tool will complain about extension
-    f="${f%.*}"
-  fi
-  info "Copying $1 to $f..."
-  cp --reflink=auto --sparse=always "$1" "$f"
-  if (( $? != 0 )); then
-    error $LINENO "Could not copy file..."
-    exit 5
-  fi
-  old_owner=$(stat -c %u:%g "$1")
-  chown "$old_owner" "$f"
-  img="$f"
+  if [ "$notfile" = false ]; then #Skip copy if input is device
+    f="$2"
+    if [[ -n $ziptool && "${f##*.}" == "${ZIPEXTENSIONS[$ziptool]}" ]]; then	# remove zip extension if zip requested because zip tool will complain about extension
+      f="${f%.*}"
+    fi
+    info "Copying $1 to $f..."
+    cp --reflink=auto --sparse=always "$1" "$f"
+    if (( $? != 0 )); then
+      error $LINENO "Could not copy file..."
+      exit 5
+    fi
+    old_owner=$(stat -c %u:%g "$1")
+    chown "$old_owner" "$f"
+    img="$f"
+  fi  
 fi
 
 # cleanup at script exit
@@ -288,17 +297,21 @@ fi
 partnum="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 1)"
 partstart="$(echo "$parted_output" | tail -n 1 | cut -d ':' -f 2 | tr -d 'B')"
 if [ -z "$(parted -s "$img" unit B print | grep "$partstart" | grep logical)" ]; then
-    parttype="primary"
+  parttype="primary"
 else
-    parttype="logical"
+  parttype="logical"
 fi
-loopback="$(losetup -f --show -o "$partstart" "$img")"
+if [ "$notfile" = false ]; then
+  loopback="$(losetup -f --show -o "$partstart" "$img")"
+else
+  loopback=""$img""2""
+fi
 tune2fs_output="$(tune2fs -l "$loopback")"
 rc=$?
 if (( $rc )); then
-    echo "$tune2fs_output"
-    error $LINENO "tune2fs failed. Unable to shrink this type of image"
-    exit 7
+  echo "$tune2fs_output"
+  error $LINENO "tune2fs failed. Unable to shrink this type of image"
+  exit 7
 fi
 
 currentsize="$(echo "$tune2fs_output" | grep '^Block count:' | tr -d ' ' | cut -d ':' -f 2)"
@@ -374,21 +387,36 @@ if (( $rc )); then
 fi
 
 #Truncate the file
-info "Shrinking image"
-endresult=$(parted -ms "$img" unit B print free)
-rc=$?
-if (( $rc )); then
-	error $LINENO "parted failed with rc $rc"
-	exit 15
-fi
+if [ "$notfile" = false ]; then 
+  info "Shrinking image"
+  endresult=$(parted -ms "$img" unit B print free)
+  rc=$?
+  if (( $rc )); then
+    error $LINENO "parted failed with rc $rc"
+    exit 15
+  fi
 
-endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
-logVariables $LINENO endresult
-truncate -s "$endresult" "$img"
-rc=$?
-if (( $rc )); then
-	error $LINENO "trunate failed with rc $rc"
-	exit 16
+  endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
+  logVariables $LINENO endresult
+  truncate -s "$endresult" "$img"
+  rc=$?
+  if (( $rc )); then
+    error $LINENO "trunate failed with rc $rc"
+    exit 16
+  fi
+else #Skip truncate if input is device
+  if [ -n "$2" ]; then
+    target="$2"
+    info "Creating image"
+    fdiskresult=$(fdisk -l "$img")
+    count=$(tail -1 <<< "$fdiskresult" | tr -s ' ' | cut -d ' ' -f 3)
+    bs=$(head -3 <<< "$fdiskresult" | tail -1 | tr -s ' ' | rev | cut -d ' ' -f 2 | rev)
+    dd if="$img" of="$target" bs="$bs" count="$count"
+    img="$target"
+  else
+    info "File system shrinked from $beforesize to $aftersize, no image created"
+    exit 0
+  fi
 fi
 
 # handle compression
