@@ -411,6 +411,7 @@ else #Skip truncate if input is device
     fdiskresult=$(fdisk -l "$img")
     count=$(tail -1 <<< "$fdiskresult" | tr -s ' ' | cut -d ' ' -f 3)
     bs=$(head -3 <<< "$fdiskresult" | tail -1 | tr -s ' ' | rev | cut -d ' ' -f 2 | rev)
+    count=$(expr "$count" + 1)
     dd if="$img" of="$target" bs="$bs" count="$count"
     img="$target"
   else
