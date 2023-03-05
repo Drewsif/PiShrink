@@ -17,6 +17,7 @@ Usage: $0 [-adhrsvzZ] imagefile.img [newimagefile.img]
   -Z         Compress image after shrinking with xz
   -a         Compress image in parallel using multiple cores
   -d         Write debug messages in a debug log file
+  -n         The first input is device, not file
 ```
 
 If you specify the `newimagefile.img` parameter, the script will make a copy of `imagefile.img` and work off that. You will need enough space to make a full copy of the image to use that option.
@@ -28,6 +29,7 @@ If you specify the `newimagefile.img` parameter, the script will make a copy of 
 * `-Z` will compress the image after shrinking using xz. `.xz` extension will be added to the filename.
 * `-a` will use option -f9 for pigz and option -T0 for xz and compress in parallel.
 * `-d` will create a logfile `pishrink.log` which may help for problem analysis.
+* `-n` will shrink the file system of a tfcard, and create an image file from that if `newimagefile.img` is specified.
 
 Default options for compressors can be overwritten by defining PISHRINK_GZIP or PSHRINK_XZ environment variables for gzip and xz.
 
@@ -48,10 +50,10 @@ chmod +x pishrink.sh
 sudo mv pishrink.sh /usr/local/bin
 ```
 
-## Example ##
+## Example 1 ##
 
 ```bash
-[user@localhost PiShrink]$ sudo pishrink.sh pi.img
+sudo pishrink.sh pi.img
 e2fsck 1.42.9 (28-Dec-2013)
 Pass 1: Checking inodes, blocks, and sizes
 Pass 2: Checking directory structure
@@ -71,6 +73,28 @@ Updating inode references     XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 The filesystem on /dev/loop1 is now 773603 blocks long.
 
 Shrunk pi.img from 30G to 3.1G
+```
+
+## Example 2 ##
+
+```bash
+sudo pishrink.sh -n /dev/sdb pi.img
+pishrink.sh v0.1.3
+pishrink.sh: Gathering data ...
+
+pishrink.sh: Checking filesystem ...
+rootfs: 69602/155648 files (0.4% non-contiguous), 457517/599771 blocks
+resize2fs 1.46.5 (30-Dec-2021)
+pishrink.sh: Shrinking filesystem ...
+resize2fs 1.46.5 (30-Dec-2021)
+Resizing the filesystem on /dev/sdb2 to 597213 (4k) blocks.
+The filesystem on /dev/sdb2 is now 597213 (4k) blocks long.
+
+pishrink.sh: Creating image ...
+5310185+0 records in
+5310185+0 records out
+2718814720 bytes (2.7 GB, 2.5 GiB) copied, 294.339 s, 9.2 MB/s
+pishrink.sh: Shrunk pi.img from 8, to 2.6G ...
 ```
 
 ## Contributing ##
