@@ -330,15 +330,8 @@ if [[ $currentsize -eq $minsize ]]; then
   exit 11
 fi
 
-#Add some free space to the end of the filesystem
-extra_space=$(($currentsize - $minsize))
-logVariables $LINENO extra_space
-for space in 5000 1000 100; do
-  if [[ $extra_space -gt $space ]]; then
-    minsize=$(($minsize + $space))
-    break
-  fi
-done
+#Add 5% free space to the end of the filesystem
+minsize=$(($minsize + ($minsize/20)))
 logVariables $LINENO minsize
 
 #Shrink filesystem
