@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version="v0.1.3"
+version="v0.1.4"
 
 CURRENT_DIR="$(pwd)"
 SCRIPTNAME="${0##*/}"
@@ -84,7 +84,11 @@ function set_autoexpand() {
         return
     fi
 
-    if [[ -f "$mountdir/etc/rc.local" ]] && [[ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "1c579c7d5b4292fd948399b6ece39009" ]]; then
+    if [[ ! -f "$mountdir/etc/rc.local" ]]; then
+        info "An existing /etc/rc.local was not found, autoexpand may fail..."
+    fi
+
+    if [[ -f "$mountdir/etc/rc.local" ]] && [[ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "5c286b336c0606ed8e6f87708f7802eb" ]]; then
       echo "Creating new /etc/rc.local"
     if [ -f "$mountdir/etc/rc.local" ]; then
         mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
@@ -124,7 +128,7 @@ cat <<EOF > /etc/rc.local &&
 #!/bin/sh
 echo "Expanding /dev/$ROOT_PART"
 resize2fs /dev/$ROOT_PART
-rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
+rm -f /etc/rc.local; cp -fp /etc/rc.local.bak /etc/rc.local && /etc/rc.local
 
 EOF
 reboot
@@ -135,7 +139,7 @@ raspi_config_expand() {
 if [[ $? != 0 ]]; then
   return -1
 else
-  rm -f /etc/rc.local; cp -f /etc/rc.local.bak /etc/rc.local; /etc/rc.local
+  rm -f /etc/rc.local; cp -fp /etc/rc.local.bak /etc/rc.local && /etc/rc.local
   reboot
   exit
 fi
@@ -147,7 +151,7 @@ do_expand_rootfs
 echo "ERROR: Expanding failed..."
 sleep 5
 if [[ -f /etc/rc.local.bak ]]; then
-  cp -f /etc/rc.local.bak /etc/rc.local
+  cp -fp /etc/rc.local.bak /etc/rc.local
   /etc/rc.local
 fi
 exit 0
