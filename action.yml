@@ -1,0 +1,97 @@
+name: "Run PiShrink"
+author: ethanjli
+description: Shrinks and compresses a Raspberry Pi SD card image.
+branding:
+  icon: minimize-2
+  color: red
+
+inputs:
+  image:
+    description: Path of the image to shrink
+    required: true
+  destination:
+    description: Path to write the shrunken image to
+    required: false
+  compress:
+    description:
+      Compress the image after shrinking using gzip or xz;
+      if set, the `.gz` or `.xz` extension (respectively) will be added to the file name.
+      Allowed values are `gzip`, `xz`, and `none`.
+    required: false
+    default: none
+  compress-parallel:
+    description:
+      Compress the image in parallel using multiple cores;
+      use option `-f9` for pigz and option `-T0` for xz and compress in parallel
+    required: false
+    default: false
+  prevent-expansion:
+    description: Prevent automatic filesystem expansion when the image is booted for the first time
+    required: false
+    default: false
+  advanced-fs-repair:
+    description: Attempt to repair the filesystem using additional options if the normal repair fails
+    required: false
+    default: false
+  verbose:
+    description: Enable more verbose output
+    required: false
+    default: false
+  # TODO: expose the -d flag - but where does the debug log file get written, and how should we
+  # expose it?
+
+outputs:
+  destination:
+    description: Path of the shrunken image
+    value: ${{ steps.run-pishrink.outputs.destination }}
+
+runs:
+  using: composite
+  steps:
+    - id: run-pishrink
+      shell: bash
+      run: |
+        flags=""
+        destination=""
+        case ${{ inputs.compress }} in
+          gzip | gz)
+            flags="$flags -z"
+            if [ ! -z "${{ inputs.destination }}" ]; then
+              destination="$(sed 's~\.gz$~~' "${{ inputs.destination }}")"
+              echo "destination=$destination.gz" >> $GITHUB_OUTPUT
+            else
+              echo "destination=${{ inputs.image }}.gz" >> $GITHUB_OUTPUT
+            fi
+            ;;
+          xz)
+            flags="$flags -Z"
+            if [ ! -z "${{ inputs.destination }}" ]; then
+              destination="$(sed 's~\.xz$~~' "${{ inputs.destination }}")"
+              echo "destination=$destination.xz" >> $GITHUB_OUTPUT
+            else
+              echo "destination=${{ inputs.image }}.xz" >> $GITHUB_OUTPUT
+            fi
+            ;;
+          none | "false" | "")
+            echo "destination=${{ inputs.destination || inputs.image }}" >> $GITHUB_OUTPUT
+            ;;
+          *)
+            echo "Error: unrecognized compression type: ${{ inputs.compress }}"
+            exit 1
+            ;;
+        esac
+        if [ ${{ inputs.compress-parallel }} == "true" ]; then
+          flags="$flags -a"
+        fi
+        if [ ${{ inputs.prevent-expansion }} == "true" ]; then
+          flags="$flags -s"
+        fi
+        if [ ${{ inputs.advanced-fs-repair }} == "true" ]; then
+          flags="$flags -r"
+        fi
+        if [ ${{ inputs.verbose }} == "true" ]; then
+          flags="$flags -v"
+        fi
+
+        echo "Running pishrink.sh $flags ${{ inputs.image }} $destination..."
+        ${{ github.action_path }}/pishrink.sh $flags ${{ inputs.image }} $destination
