@@ -4,12 +4,15 @@ GitHub action to run [PiShrink](https://github.com/Drewsif/PiShrink) on a Raspbe
 
 ## Basic Usage Examples
 
+Note: in the below example sequences of GitHub Actions job steps, the URL of the downloaded image
+doesn't actually exist! Normally, you would generate an image file by some other method, e.g.
+downloading a base image, expanding it, and modifying its filesystem (e.g. with
+[Pimod](https://github.com/Nature40/pimod), as in [a below example](#pimod-usage-example)).
+
 ### Shrink with gzip
 
 ```
 - name: Download an example image
-  # Note: this URL doesn't actually exist! Normally, you would generate an image file by some other
-  # method, e.g. downloading a base image, expanding it, and modifying its filesystem.
   run: wget http://some-website.com/large-rpi-sd-card-image.img
 
 - name: Shrink image
@@ -32,8 +35,6 @@ GitHub action to run [PiShrink](https://github.com/Drewsif/PiShrink) on a Raspbe
 
 ```
 - name: Download an example image
-  # Note: this URL doesn't actually exist! Normally, you would generate an image file by some other
-  # method, e.g. downloading a base image, expanding it, and modifying its filesystem.
   run: wget http://some-website.com/large-rpi-sd-card-image.img
 
 - name: Shrink image
@@ -56,8 +57,6 @@ GitHub action to run [PiShrink](https://github.com/Drewsif/PiShrink) on a Raspbe
 
 ```
 - name: Download an example image
-  # Note: this URL doesn't actually exist! Normally, you would generate an image file by some other
-  # method, e.g. downloading a base image, expanding it, and modifying its filesystem.
   run: wget http://some-website.com/large-rpi-sd-card-image.img
 
 - name: Shrink image
@@ -82,8 +81,6 @@ GitHub action to run [PiShrink](https://github.com/Drewsif/PiShrink) on a Raspbe
 
 ```
 - name: Download an example image
-  # Note: this URL doesn't actually exist! Normally, you would generate an image file by some other
-  # method, e.g. downloading a base image, expanding it, and modifying its filesystem.
   run: wget http://some-website.com/large-rpi-sd-card-image.img
 
 - name: Shrink image
@@ -104,7 +101,55 @@ GitHub action to run [PiShrink](https://github.com/Drewsif/PiShrink) on a Raspbe
     overwrite: true
 ```
 
-### Usage Options
+## Pimod Usage Example
+
+This example job uses Pimod to generate a custom image, and then shrinks it before uploading as an
+artifact on the GitHub Actions job:
+
+```
+jobs:
+  build:
+    name: Build image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Make a Pifile for Pimod
+        uses: 1arp/create-a-file-action@0.4.5
+        with:
+          path: cowsay.Pifile
+          content: |
+            FROM https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2024-03-15/2024-03-15-raspios-bookworm-arm64-lite.img.xz
+            TO cowsay-image.img
+            PUMP 8G
+
+            # Install and test out cowsay:
+            RUN apt-get update
+            RUN apt-get install -y cowsay
+            echo "I'm running in a chroot!" | cowsay
+
+      - name: Build the image
+        uses: Nature40/pimod@master
+        with:
+          pifile: cowsay.Pifile
+
+      - name: Shrink the image
+        uses: ethanjli/pishrink-action@v0.1.0
+        with:
+          image: cowsay-image.img
+          compress: gzip
+          compress-parallel: true
+
+      - name: Upload image to Job Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cowsay-image
+          path: cowsay-image.img.gz
+          if-no-files-found: error
+          retention-days: 0
+          compression-level: 0
+          overwrite: true
+```
+
+## Usage Options
 
 Inputs:
 

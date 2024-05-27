@@ -1,0 +1,55 @@
+name: build-os
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - '**/README.md'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**/README.md'
+  merge_group:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Make a Pifile for Pimod
+        uses: 1arp/create-a-file-action@0.4.5
+        with:
+          path: cowsay.Pifile
+          content: |
+            FROM https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2024-03-15/2024-03-15-raspios-bookworm-arm64-lite.img.xz
+            TO cowsay-image.img
+            PUMP 8G
+
+            # Install and test out cowsay:
+            RUN apt-get update
+            RUN apt-get install -y cowsay
+            echo "I'm running in a chroot!" | cowsay
+
+      - name: Build the image
+        uses: Nature40/pimod@master
+        with:
+          pifile: cowsay.Pifile
+
+      - name: Shrink the image
+        uses: ./
+        with:
+          image: cowsay-image.img
+          compress: gzip
+          compress-parallel: true
+
+      - name: Upload image to Job Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cowsay-image
+          path: cowsay-image.img.gz
+          if-no-files-found: error
+          retention-days: 0
+          compression-level: 0
+          overwrite: true
