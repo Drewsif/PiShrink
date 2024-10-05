@@ -40,6 +40,10 @@ is know to cause issues.
 
 If using Ubuntu, you will likely see an error about `e2fsck` being out of date and `metadata_csum`. The simplest fix for this is to use Ubuntu 16.10 and up, as it will save you a lot of hassle in the long run.
 
+PiShrink will shrink the last partition of your image. If that partition is not ext2, ext3, or ext4 it will not be able to shrink your image.
+If the last partition is not the root filesystem partition, auto resizing will not run on boot.
+If you want to use auto resizing on a distro using Systemd, you should ensure you [Enabled /etc/rc.local Compatibility](https://www.linuxbabe.com/linux-server/how-to-enable-etcrc-local-with-systemd).
+
 ## Installation ##
 
 ### Linux Instructions ###
