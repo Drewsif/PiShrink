@@ -330,7 +330,7 @@ fi
 minsize=$(cut -d ':' -f 2 <<< "$minsize" | tr -d ' ')
 logVariables $LINENO currentsize minsize
 if [[ $currentsize -eq $minsize ]]; then
-  info "Filesystem already shrunk to smallest size. Skipping filesystem shrinking."
+  info "Filesystem already shrunk to smallest size. Skipping filesystem shrinking"
 else
   #Add some free space to the end of the filesystem
   extra_space=$(($currentsize - $minsize))
@@ -356,43 +356,43 @@ else
     exit 12
   fi
   sleep 1
-fi
 
-#Shrink partition
-info "Shrinking partition"
-partnewsize=$(($minsize * $blocksize))
-newpartend=$(($partstart + $partnewsize))
-logVariables $LINENO partnewsize newpartend
-parted -s -a minimal "$img" rm "$partnum"
-rc=$?
-if (( $rc )); then
-	error $LINENO "parted failed with rc $rc"
-	exit 13
-fi
+  #Shrink partition
+  info "Shrinking partition"
+  partnewsize=$(($minsize * $blocksize))
+  newpartend=$(($partstart + $partnewsize))
+  logVariables $LINENO partnewsize newpartend
+  parted -s -a minimal "$img" rm "$partnum"
+  rc=$?
+  if (( $rc )); then
+    error $LINENO "parted failed with rc $rc"
+    exit 13
+  fi
 
-parted -s "$img" unit B mkpart "$parttype" "$partstart" "$newpartend"
-rc=$?
-if (( $rc )); then
-	error $LINENO "parted failed with rc $rc"
-	exit 14
-fi
+  parted -s "$img" unit B mkpart "$parttype" "$partstart" "$newpartend"
+  rc=$?
+  if (( $rc )); then
+    error $LINENO "parted failed with rc $rc"
+    exit 14
+  fi
 
-#Truncate the file
-info "Shrinking image"
-endresult=$(parted -ms "$img" unit B print free)
-rc=$?
-if (( $rc )); then
-	error $LINENO "parted failed with rc $rc"
-	exit 15
-fi
+  #Truncate the file
+  info "Truncating image"
+  endresult=$(parted -ms "$img" unit B print free)
+  rc=$?
+  if (( $rc )); then
+    error $LINENO "parted failed with rc $rc"
+    exit 15
+  fi
 
-endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
-logVariables $LINENO endresult
-truncate -s "$endresult" "$img"
-rc=$?
-if (( $rc )); then
-	error $LINENO "trunate failed with rc $rc"
-	exit 16
+  endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
+  logVariables $LINENO endresult
+  truncate -s "$endresult" "$img"
+  rc=$?
+  if (( $rc )); then
+    error $LINENO "trunate failed with rc $rc"
+    exit 16
+  fi
 fi
 
 # handle compression
