@@ -88,15 +88,15 @@ function set_autoexpand() {
         info "An existing /etc/rc.local was not found, autoexpand may fail..."
     fi
 
-    if [[ -f "$mountdir/etc/rc.local" ]] && [[ "$(md5sum "$mountdir/etc/rc.local" | cut -d ' ' -f 1)" != "5c286b336c0606ed8e6f87708f7802eb" ]]; then
+    if [[ -f "$mountdir/etc/rc.local" ]] && ! grep -q "## PiShrink https://github.com/Drewsif/PiShrink ##" "$mountdir/etc/rc.local"; then
       echo "Creating new /etc/rc.local"
     if [ -f "$mountdir/etc/rc.local" ]; then
         mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
     fi
 
-    #####Do not touch the following lines#####
-cat <<\EOF1 > "$mountdir/etc/rc.local"
+cat <<'EOFRC' > "$mountdir/etc/rc.local"
 #!/bin/bash
+## PiShrink https://github.com/Drewsif/PiShrink ##
 do_expand_rootfs() {
   ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
 
@@ -155,8 +155,8 @@ if [[ -f /etc/rc.local.bak ]]; then
   /etc/rc.local
 fi
 exit 0
-EOF1
-    #####End no touch zone#####
+EOFRC
+
     chmod +x "$mountdir/etc/rc.local"
     fi
     umount "$mountdir"
