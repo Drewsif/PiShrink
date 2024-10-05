@@ -330,36 +330,36 @@ fi
 minsize=$(cut -d ':' -f 2 <<< "$minsize" | tr -d ' ')
 logVariables $LINENO currentsize minsize
 if [[ $currentsize -eq $minsize ]]; then
-  error $LINENO "Image already shrunk to smallest size"
-  exit 11
-fi
+  info "Filesystem already shrunk to smallest size. Skipping filesystem shrinking."
+else
+  #Add some free space to the end of the filesystem
+  extra_space=$(($currentsize - $minsize))
+  logVariables $LINENO extra_space
+  for space in 5000 1000 100; do
+    if [[ $extra_space -gt $space ]]; then
+      minsize=$(($minsize + $space))
+      break
+    fi
+  done
+  logVariables $LINENO minsize
 
-#Add some free space to the end of the filesystem
-extra_space=$(($currentsize - $minsize))
-logVariables $LINENO extra_space
-for space in 5000 1000 100; do
-  if [[ $extra_space -gt $space ]]; then
-    minsize=$(($minsize + $space))
-    break
+  #Shrink filesystem
+  info "Shrinking filesystem"
+  resize2fs -p "$loopback" $minsize
+  rc=$?
+  if (( $rc )); then
+    error $LINENO "resize2fs failed with rc $rc"
+    mount "$loopback" "$mountdir"
+    mv "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local"
+    umount "$mountdir"
+    losetup -d "$loopback"
+    exit 12
   fi
-done
-logVariables $LINENO minsize
-
-#Shrink filesystem
-info "Shrinking filesystem"
-resize2fs -p "$loopback" $minsize
-rc=$?
-if (( $rc )); then
-  error $LINENO "resize2fs failed with rc $rc"
-  mount "$loopback" "$mountdir"
-  mv "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local"
-  umount "$mountdir"
-  losetup -d "$loopback"
-  exit 12
+  sleep 1
 fi
-sleep 1
 
 #Shrink partition
+info "Shrinking partition"
 partnewsize=$(($minsize * $blocksize))
 newpartend=$(($partstart + $partnewsize))
 logVariables $LINENO partnewsize newpartend
