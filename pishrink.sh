@@ -17,7 +17,7 @@ declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f9" [xz]="-T0" ) # options for zip to
 declare -A ZIPEXTENSIONS=( [gzip]="gz" [xz]="xz" ) # extensions of zipped files
 
 function info() {
-	echo "$SCRIPTNAME: $1 ..."
+	echo "$SCRIPTNAME: $1"
 }
 
 function error() {
