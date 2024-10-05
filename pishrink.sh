@@ -358,6 +358,13 @@ else
     umount "$mountdir"
     losetup -d "$loopback"
     exit 12
+  else
+    info "Zeroing any free space left"
+    mount "$loopback" "$mountdir"
+    cat /dev/zero > "$mountdir/PiShrink_zero_file" 2>/dev/null
+    info "Zeroed $(ls -lh "$mountdir/PiShrink_zero_file" | cut -d ' ' -f 5)"
+    rm -f "$mountdir/PiShrink_zero_file"
+    umount "$mountdir"
   fi
   sleep 1
 
