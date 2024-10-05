@@ -394,7 +394,7 @@ else
   truncate -s "$endresult" "$img"
   rc=$?
   if (( $rc )); then
-    error $LINENO "trunate failed with rc $rc"
+    error $LINENO "truncate failed with rc $rc"
     exit 16
   fi
 fi
