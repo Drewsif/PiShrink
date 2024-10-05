@@ -7,7 +7,7 @@ using multiple cores is supported.
 
 ## Usage ##
 
-```
+```text
 Usage: $0 [-adhrsvzZ] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
@@ -35,18 +35,46 @@ Default options for compressors can be overwritten by defining PISHRINK_GZIP or 
 
 If you are running PiShrink in VirtualBox you will likely encounter an error if you
 attempt to use VirtualBox's "Shared Folder" feature. You can copy the image you wish to
-shrink on to the VM from a Shared Folder, but shrinking directctly from the Shared Folder
+shrink on to the VM from a Shared Folder, but shrinking directly from the Shared Folder
 is know to cause issues.
 
 If using Ubuntu, you will likely see an error about `e2fsck` being out of date and `metadata_csum`. The simplest fix for this is to use Ubuntu 16.10 and up, as it will save you a lot of hassle in the long run.
 
 ## Installation ##
 
+### Linux Instructions ###
+
+If you are on Debian/Ubuntu you can install all the packages you would need by running: `sudo apt update && sudo apt install -y wget parted gzip pigz xz-utils udev e2fsprogs`
+
+Run the block below to install PiShrink onto your system.
+
 ```bash
 wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
 chmod +x pishrink.sh
 sudo mv pishrink.sh /usr/local/bin
 ```
+
+### Windows Instructions ###
+
+PiShrink can be ran on Windows using [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/about) (WSL 2).
+
+1. In an Administrator command prompt run `wsl --install -d Debian`. You will likely need to reboot after. Please check [Microsoft's documentation](https://learn.microsoft.com/en-us/windows/wsl/install) if you run into issues.
+2. Open the `Debian` app from your start menu.
+3. Run `sudo apt update && sudo apt install -y wget parted gzip pigz xz-utils udev e2fsprogs`
+4. Go to the Linux Instructions section above, do that and you're good to go! Your C:\ drive is mounted at /mnt/c/
+
+### MacOS Instructions ###
+
+These instructions were sourced from the community and should work on Intel and M1 Macs.
+
+1. [Installer Docker](https://docs.docker.com/docker-for-mac/install/).
+2. `cd` in the pishrink directory you downloaded/cloned.
+3. Build the container by running `docker build -t pishrink .`
+4. Create an alias to run PiShrink `echo "alias pishrink='docker run -it --rm --platform linux/amd64 --privileged=true -v $(pwd):/workdir pishrink'" >> ~/.bashrc && source ~/.bashrc`
+
+You can now run the `pishrink` command as normal to shrink your images.
+
+***Please Note:*** You MUST change directory into the images folder for this command to work. The command mounts your current working directory into the container so absolute file paths will not work. Relative paths should work just fine as long as they are below your current directory.
 
 ## Example ##
 
