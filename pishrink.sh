@@ -212,7 +212,7 @@ if [ "$debug" = true ]; then
 	exec 2> >(stdbuf -i0 -o0 -e0 tee -a "$LOGFILE" >&2)
 fi
 
-echo "${0##*/} $version"
+echo -e "PiShrink $version - https://github.com/Drewsif/PiShrink\n"
 
 #Args
 src="$1"
