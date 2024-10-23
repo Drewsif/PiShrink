@@ -349,10 +349,11 @@ else
 
   #Shrink filesystem
   info "Shrinking filesystem"
-  resize2fs -p "$loopback" $minsize
-  if [ -n "$mount_dir" ]; then
+  if [ -z "$mountdir" ]; then
     mountdir=$(mktemp -d)
   fi
+
+  resize2fs -p "$loopback" $minsize
   rc=$?
   if (( $rc )); then
     error $LINENO "resize2fs failed with rc $rc"
