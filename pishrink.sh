@@ -169,10 +169,11 @@ EOFRC
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-adhrsvzZ] imagefile.img [newimagefile.img]
+Usage: $0 [-adhnrsvzZ] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
   -v         Be verbose
+  -n         Disable automatic update checking
   -r         Use advanced filesystem repair option if the normal one fails
   -z         Compress image after shrinking with gzip
   -Z         Compress image after shrinking with xz
@@ -185,15 +186,17 @@ EOM
 
 should_skip_autoexpand=false
 debug=false
+update_check=true
 repair=false
 parallel=false
 verbose=false
 ziptool=""
 
-while getopts ":adhrsvzZ" opt; do
+while getopts ":adnhrsvzZ" opt; do
   case "${opt}" in
     a) parallel=true;;
     d) debug=true;;
+    n) update_check=false;;
     h) help;;
     r) repair=true;;
     s) should_skip_autoexpand=true ;;
@@ -213,6 +216,15 @@ if [ "$debug" = true ]; then
 fi
 
 echo -e "PiShrink $version - https://github.com/Drewsif/PiShrink\n"
+
+# Try and check for updates
+if $update_check; then
+  latest_release=$(curl -m 5 https://api.github.com/repos/Drewsif/PiShrink/releases/latest 2>/dev/null | grep -i "tag_name" 2>/dev/null | awk -F '"' '{print $4}' 2>/dev/null)
+  if [[ $? ]] && [ "$latest_release" \> "$version" ]; then
+    echo "WARNING: You do not appear to be running the latest version of PiShrink. Head on over to https://github.com/Drewsif/PiShrink to grab $latest_release"
+    echo ""
+  fi
+fi
 
 #Args
 src="$1"
@@ -238,7 +250,6 @@ fi
 export LANGUAGE=POSIX
 export LC_ALL=POSIX
 export LANG=POSIX
-
 
 # check selected compression tool is supported and installed
 if [[ -n $ziptool ]]; then

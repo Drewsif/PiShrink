@@ -8,10 +8,11 @@ using multiple cores is supported.
 ## Usage ##
 
 ```text
-Usage: $0 [-adhrsvzZ] imagefile.img [newimagefile.img]
+Usage: pishrink.sh [-adhnrsvzZ] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
   -v         Be verbose
+  -n         Disable automatic update checking
   -r         Use advanced filesystem repair option if the normal one fails
   -z         Compress image after shrinking with gzip
   -Z         Compress image after shrinking with xz
@@ -23,6 +24,7 @@ If you specify the `newimagefile.img` parameter, the script will make a copy of 
 
 * `-s` prevents automatic filesystem expansion on the images next boot
 * `-v` enables more verbose output
+* `-n` disables the script from checking Github for a new PiShrink release
 * `-r` will attempt to repair the filesystem using additional options if the normal repair fails
 * `-z` will compress the image after shrinking using gzip. `.gz` extension will be added to the filename.
 * `-Z` will compress the image after shrinking using xz. `.xz` extension will be added to the filename.
