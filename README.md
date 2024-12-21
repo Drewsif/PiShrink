@@ -71,16 +71,27 @@ PiShrink can be ran on Windows using [Windows Subsystem for Linux](https://learn
 
 ### MacOS Instructions ###
 
-These instructions were sourced from the community and should work on Intel and M1 Macs.
+> [!NOTE]
+> These instructions were sourced from the community and should work on Intel and M1 Macs.
 
 1. [Installer Docker](https://docs.docker.com/docker-for-mac/install/).
-2. `cd` in the pishrink directory you downloaded/cloned.
-3. Build the container by running `docker build -t pishrink .`
-4. Create an alias to run PiShrink `echo "alias pishrink='docker run -it --rm --platform linux/amd64 --privileged=true -v $(pwd):/workdir pishrink'" >> ~/.bashrc && source ~/.bashrc`
+2. Clone this repo and cd into the pishrink directory:
+   ```bash
+   git clone https://github.com/Drewsif/PiShrink && cd PiShrink
+   ```
+4. Build the container by running:
+   ```bash
+   docker build -t pishrink .
+   ```
+6. Create an alias to run PiShrink:
+   ```bash
+   echo "alias pishrink='docker run -it --rm --platform linux/amd64 --privileged=true -v $(pwd):/workdir pishrink'" >> ~/.bashrc && source ~/.bashrc
+   ```
 
 You can now run the `pishrink` command as normal to shrink your images.
 
-***Please Note:*** You MUST change directory into the images folder for this command to work. The command mounts your current working directory into the container so absolute file paths will not work. Relative paths should work just fine as long as they are below your current directory.
+> [!WARNING]  
+> You MUST change directory into the images folder for this command to work. The command mounts your current working directory into the container so absolute file paths will not work. Relative paths should work just fine as long as they are below your current directory.
 
 ## Example ##
 
