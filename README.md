@@ -81,14 +81,14 @@ PiShrink can be ran on Windows using [Windows Subsystem for Linux](https://learn
    ```
 4. Build the container by running:
    ```bash
-   docker build -t pishrink .
+   docker buildx --platform=linux/amd64 -t pishrink .
    ```
-6. Create an alias to run PiShrink:
+6. Create an alias to run PiShrink, note this alias has a `-` in it to avoid a circular reference. 
    ```bash
-   echo "alias pishrink='docker run -it --rm --platform linux/amd64 --privileged=true -v $(pwd):/workdir pishrink'" >> ~/.bashrc && source ~/.bashrc
+   echo "alias pi-shrink='docker run -it --rm --platform linux/amd64 --privileged=true -v $(pwd):/workdir pishrink'" >> ~/.bashrc && source ~/.bashrc
    ```
 
-You can now run the `pishrink` command as normal to shrink your images.
+You can now run the `pi-shrink` command as normal to shrink your images.
 
 > [!WARNING]  
 > You MUST change directory into the images folder for this command to work. The command mounts your current working directory into the container so absolute file paths will not work. Relative paths should work just fine as long as they are below your current directory.
@@ -123,3 +123,4 @@ Shrunk pi.img from 30G to 3.1G
 If you find a bug please create an issue for it. If you would like a new feature added, you can create an issue for it but I can't promise that I will get to it.
 
 Pull requests for new features and bug fixes are more than welcome!
+
