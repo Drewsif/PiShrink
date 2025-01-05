@@ -1,6 +1,6 @@
 FROM debian:bookworm
 
-# Install requirments
+# Install requirements
 RUN apt update && apt install -y wget parted gzip pigz xz-utils udev e2fsprogs && apt clean
 
 # Setup Env
