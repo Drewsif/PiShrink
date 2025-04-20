@@ -85,7 +85,7 @@ PiShrink can be ran on Windows using [Windows Subsystem for Linux](https://learn
    ```
 6. Create an alias to run PiShrink:
    ```bash
-   echo "alias pishrink='docker run -it --rm --platform linux/amd64 --privileged=true -v $(pwd):/workdir pishrink'" >> ~/.bashrc && source ~/.bashrc
+   echo "alias pishrink='docker run -it --rm --privileged=true -v $(pwd):/workdir pishrink'" >> ~/.bashrc && source ~/.bashrc
    ```
 
 You can now run the `pishrink` command as normal to shrink your images.
