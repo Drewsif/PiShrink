@@ -169,7 +169,7 @@ EOFRC
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-adhnrsvzZ] imagefile.img [newimagefile.img]
+Usage: $0 [-adhmnrsvzZ] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
   -v         Be verbose
@@ -179,6 +179,7 @@ Usage: $0 [-adhnrsvzZ] imagefile.img [newimagefile.img]
   -Z         Compress image after shrinking with xz
   -a         Compress image in parallel using multiple cores
   -d         Write debug messages in a debug log file
+  -m         minimum size of the image 6Go as LibreElec doesn't allow to expand filesystem
 EOM
 	echo "$help"
 	exit 1
@@ -186,16 +187,19 @@ EOM
 
 should_skip_autoexpand=false
 debug=false
+libreelec=0
+#1500000 = 1.5M * 4k octets = 6 GO
 update_check=true
 repair=false
 parallel=false
 verbose=false
 ziptool=""
 
-while getopts ":adnhrsvzZ" opt; do
+while getopts ":admnhrsvzZ" opt; do
   case "${opt}" in
     a) parallel=true;;
     d) debug=true;;
+    m) libreelec=1500000;;
     n) update_check=false;;
     h) help;;
     r) repair=true;;
@@ -215,7 +219,7 @@ if [ "$debug" = true ]; then
 	exec 2> >(stdbuf -i0 -o0 -e0 tee -a "$LOGFILE" >&2)
 fi
 
-echo -e "PiShrink $version - https://github.com/Drewsif/PiShrink\n"
+echo -e "PiShrink $version - https://github.com/Drewsif/PiShrink mod CCA\n"
 
 # Try and check for updates
 if $update_check; then
@@ -352,7 +356,7 @@ else
   logVariables $LINENO extra_space
   for space in 5000 1000 100; do
     if [[ $extra_space -gt $space ]]; then
-      minsize=$(($minsize + $space))
+      minsize=$(($minsize + $space + $libreelec))
       break
     fi
   done
