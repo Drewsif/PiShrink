@@ -1,15 +1,17 @@
-FROM debian:bookworm
+FROM debian:stable-slim
 
-# Install requirments
-RUN apt update && apt install -y wget parted gzip pigz xz-utils udev e2fsprogs && apt clean
+# 1) Install PiShrink prereqs
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      e2fsprogs dosfstools parted xz-utils squashfs-tools kpartx ca-certificates curl \
+ && rm -rf /var/lib/apt/lists/*
 
-# Setup Env
-ENV LANG=C.UTF-8
-ENV TERM=xterm-256color
-ENV DEBIAN_FRONTEND=noninteractive
-WORKDIR /workdir
+# 2) Copy in PiShrink & our wrapper
+COPY pishrink.sh shrink-wrapper.sh /usr/local/bin/
 
-# Copy pishrink in
-COPY pishrink.sh /usr/local/bin/pishrink
-RUN chmod +x /usr/local/bin/pishrink
-ENTRYPOINT [ "/usr/local/bin/pishrink" ]
+# 3) Fix the shebang on pishrink, rename for tidiness, and chmod both
+RUN mv /usr/local/bin/pishrink.sh /usr/local/bin/pishrink \
+ && mv /usr/local/bin/shrink-wrapper.sh /usr/local/bin/shrink-wrapper \
+ && chmod +x /usr/local/bin/pishrink /usr/local/bin/shrink-wrapper
+
+# — no ENTRYPOINT or CMD —
