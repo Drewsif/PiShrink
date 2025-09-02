@@ -10,7 +10,7 @@ CURRENT_DIR="$(pwd)"
 SCRIPTNAME="${0##*/}"
 MYNAME="${SCRIPTNAME%.*}"
 LOGFILE="${CURRENT_DIR}/${SCRIPTNAME%.*}.log"
-REQUIRED_TOOLS="parted losetup tune2fs md5sum e2fsck resize2fs"
+REQUIRED_TOOLS="parted losetup tune2fs md5sum e2fsck resize2fs gdisk"
 ZIPTOOLS=("gzip xz")
 declare -A ZIP_PARALLEL_TOOL=( [gzip]="pigz" [xz]="xz" ) # parallel zip tool to use in parallel mode
 declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f9" [xz]="-T0" ) # options for zip tools in parallel mode
@@ -27,9 +27,7 @@ function error() {
 }
 
 function cleanup() {
-	if losetup "$loopback" &>/dev/null; then
-		losetup -d "$loopback"
-	fi
+	losetup -D 2>/dev/null
 	if [ "$debug" = true ]; then
 		local old_owner=$(stat -c %u:%g "$src")
 		chown "$old_owner" "$LOGFILE"
@@ -311,7 +309,15 @@ if [ -z "$(parted -s "$img" unit B print | grep "$partstart" | grep logical)" ];
 else
     parttype="logical"
 fi
-loopback="$(losetup -f --show -o "$partstart" "$img")"
+losetup -D
+losetup -P /dev/loop0 "${img}"
+loopback="/dev/loop0p3"
+rc=$?
+if (( $rc )); then
+   error $LINENO "losetup failed with rc $rc"
+   exit 6
+fi
+
 tune2fs_output="$(tune2fs -l "$loopback")"
 rc=$?
 if (( $rc )); then
@@ -364,6 +370,13 @@ else
     mountdir=$(mktemp -d)
   fi
 
+  e2fsck -f "$loopback"
+  rc=$?
+  echo
+  if (( $rc )); then
+    exit 7
+  fi
+
   resize2fs -p "$loopback" $minsize
   rc=$?
   if (( $rc )); then
@@ -371,7 +384,7 @@ else
     mount "$loopback" "$mountdir"
     mv "$mountdir/etc/rc.local.bak" "$mountdir/etc/rc.local"
     umount "$mountdir"
-    losetup -d "$loopback"
+    losetup -D
     exit 12
   else
     info "Zeroing any free space left"
@@ -382,25 +395,39 @@ else
     umount "$mountdir"
   fi
   sleep 1
+  losetup -D 
 
   #Shrink partition
-  info "Shrinking partition"
+  info "Shrinking partition with gdisk"
   partnewsize=$(($minsize * $blocksize))
   newpartend=$(($partstart + $partnewsize))
   logVariables $LINENO partnewsize newpartend
-  parted -s -a minimal "$img" rm "$partnum"
-  rc=$?
-  if (( $rc )); then
-    error $LINENO "parted failed with rc $rc"
-    exit 13
-  fi
 
-  parted -s "$img" unit B mkpart "$parttype" "$partstart" "$newpartend"
-  rc=$?
-  if (( $rc )); then
-    error $LINENO "parted failed with rc $rc"
-    exit 14
-  fi
+  sectorsize=$(gdisk -l "${img}" | grep "Sector size (logical)" | awk -F": " {'print $2'} | awk {'print $1'})
+  sectorstart=$(($partstart / $sectorsize))
+  sectorend=$(($newpartend / $sectorsize))
+  addblock=$(($sectorsize * 56))
+  logVariables $LINENO sectorsize sectorstart sectorend
+
+  gdisk -l $img
+  echo 
+  # https://superuser.com/a/984637
+  sed -e 's/\s*\([\+0-9a-zA-Z\.]*\).*/\1/' << EOF | gdisk $img
+    d # delete partition
+    3 # part number
+    n # new partition
+    3 # part number
+    $sectorstart # start sector
+    $sectorend #end sector
+    8305 # Hex code or GUID
+    c # change partition name
+    3 # part number
+    p.lxroot # part name
+    w # write changes
+    Y # accept changes
+    q # and we're done
+EOF
+  echo
 
   #Truncate the file
   info "Truncating image"
@@ -412,6 +439,7 @@ else
   fi
 
   endresult=$(tail -1 <<< "$endresult" | cut -d ':' -f 2 | tr -d 'B')
+  endresult=$(($endresult + $addblock))
   logVariables $LINENO endresult
   truncate -s "$endresult" "$img"
   rc=$?
@@ -419,6 +447,20 @@ else
     error $LINENO "truncate failed with rc $rc"
     exit 16
   fi
+  echo
+
+  #Truncate the file
+  info "gdisk: Regenerating backup header from main header"
+  sed -e 's/\s*\([\+0-9a-zA-Z\.]*\).*/\1/' << EOF | gdisk $img
+    p # print partition table
+    v # verify
+    w # write table
+    Y # accept secondary header warning
+    Y # accept write
+EOF
+  echo
+  gdisk -l $img
+  echo
 fi
 
 # handle compression
