@@ -11,10 +11,11 @@ SCRIPTNAME="${0##*/}"
 MYNAME="${SCRIPTNAME%.*}"
 LOGFILE="${CURRENT_DIR}/${SCRIPTNAME%.*}.log"
 REQUIRED_TOOLS="parted losetup tune2fs md5sum e2fsck resize2fs"
-ZIPTOOLS=("gzip xz")
-declare -A ZIP_PARALLEL_TOOL=( [gzip]="pigz" [xz]="xz" ) # parallel zip tool to use in parallel mode
-declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f9" [xz]="-T0 -9e" ) # options for zip tools in parallel mode
-declare -A ZIPEXTENSIONS=( [gzip]="gz" [xz]="xz" ) # extensions of zipped files
+ZIPTOOLS=("gzip xz zstd")
+declare -A ZIP_PARALLEL_TOOL=( [gzip]="pigz" [xz]="xz" [zstd]="zstd" ) # parallel zip tool to use in parallel mode
+declare -A ZIP_OPTIONS=( [gzip]="-f9 -k" [xz]="-T0 -9e -k" [zstd]="-T0 -1 -f" ) # default options for zip tools
+declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f9 -k" [xz]="-T0 -9e -k" [zstd]="-T0 -1 -f" ) # options for zip tools in parallel mode
+declare -A ZIPEXTENSIONS=( [gzip]="gz" [xz]="xz" [zstd]="zst" ) # extensions of zipped files
 
 function info() {
 	echo "$SCRIPTNAME: $1"
@@ -24,6 +25,41 @@ function error() {
 	echo -n "$SCRIPTNAME: ERROR occurred in line $1: "
 	shift
 	echo "$@"
+}
+
+function get_file_size_bytes() {
+	local path="$1"
+	if stat -c %s "$path" >/dev/null 2>&1; then
+		stat -c %s "$path"
+	else
+		stat -f %z "$path"
+	fi
+}
+
+function human_bytes() {
+	local size="$1"
+	if command -v numfmt >/dev/null 2>&1; then
+		numfmt --to=iec --suffix=B "$size"
+	else
+		echo "${size}B"
+	fi
+}
+
+function compress_xz_with_progress() {
+	local src="$1"
+	local options="$2"
+	local output="${src}.xz"
+	local input_size
+
+	input_size="$(get_file_size_bytes "$src")"
+
+	# Use pv to display percentage/time while xz reads from stdin and writes to output.
+	# shellcheck disable=SC2086
+	if ! pv -s "$input_size" "$src" | xz ${options} -c > "$output"; then
+		return 1
+	fi
+
+	return 0
 }
 
 function cleanup() {
@@ -169,14 +205,16 @@ EOFRC
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-adhnrsvzZ] imagefile.img [newimagefile.img]
+Usage: $0 [-aJdhnrsuvzZ] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
   -v         Be verbose
   -n         Disable automatic update checking
   -r         Use advanced filesystem repair option if the normal one fails
+  -u         Do not compress output image
+  -J         Compress image after shrinking with zstd (fast mode)
   -z         Compress image after shrinking with gzip
-  -Z         Compress image after shrinking with xz
+  -Z         Compress image after shrinking with xz (default: smallest mode, all cores)
   -a         Compress image in parallel using multiple cores
   -d         Write debug messages in a debug log file
 EOM
@@ -190,16 +228,18 @@ update_check=true
 repair=false
 parallel=false
 verbose=false
-ziptool=""
+ziptool="xz"
 
-while getopts ":adnhrsvzZ" opt; do
+while getopts ":aJdhnrsuvzZ" opt; do
   case "${opt}" in
     a) parallel=true;;
+    J) ziptool="zstd";;
     d) debug=true;;
     n) update_check=false;;
     h) help;;
     r) repair=true;;
     s) should_skip_autoexpand=true ;;
+    u) ziptool="";;
     v) verbose=true;;
     z) ziptool="gzip";;
     Z) ziptool="xz";;
@@ -296,7 +336,7 @@ trap cleanup EXIT
 
 #Gather info
 info "Gathering data"
-beforesize="$(ls -lh "$img" | cut -d ' ' -f 5)"
+beforesize="$(get_file_size_bytes "$img")"
 parted_output="$(parted -ms "$img" unit B print)"
 rc=$?
 if (( $rc )); then
@@ -423,16 +463,27 @@ fi
 
 # handle compression
 if [[ -n $ziptool ]]; then
-	options=""
+	options="${ZIP_OPTIONS[$ziptool]}"
 	envVarname="${MYNAME^^}_${ziptool^^}" # PISHRINK_GZIP or PISHRINK_XZ environment variables allow to override all options for gzip or xz
 	[[ $parallel == true ]] && options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
 	[[ -v $envVarname ]] && options="${!envVarname}" # if environment variable defined use these options
 	[[ $verbose == true ]] && options="$options -v" # add verbose flag if requested
+	if [[ $ziptool == "xz" && -t 2 && -z "$(command -v pv)" ]]; then
+		info "Install 'pv' to show xz compression percentage in real time"
+	fi
 
 	if [[ $parallel == true ]]; then
 		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
 		info "Using $parallel_tool on the shrunk image"
-		if ! $parallel_tool ${options} "$img"; then
+
+		# Show progress for xz compression when pv is available and stderr is a terminal.
+		if [[ $ziptool == "xz" && -t 2 && -n "$(command -v pv)" ]]; then
+			if ! compress_xz_with_progress "$img" "$options"; then
+				rc=$?
+				error $LINENO "xz failed with rc $rc"
+				exit 18
+			fi
+		elif ! $parallel_tool ${options} "$img"; then
 			rc=$?
 			error $LINENO "$parallel_tool failed with rc $rc"
 			exit 18
@@ -440,7 +491,15 @@ if [[ -n $ziptool ]]; then
 
 	else # sequential
 		info "Using $ziptool on the shrunk image"
-		if ! $ziptool ${options} "$img"; then
+
+		# Show progress for xz compression when pv is available and stderr is a terminal.
+		if [[ $ziptool == "xz" && -t 2 && -n "$(command -v pv)" ]]; then
+			if ! compress_xz_with_progress "$img" "$options"; then
+				rc=$?
+				error $LINENO "xz failed with rc $rc"
+				exit 19
+			fi
+		elif ! $ziptool ${options} "$img"; then
 			rc=$?
 			error $LINENO "$ziptool failed with rc $rc"
 			exit 19
@@ -449,7 +508,8 @@ if [[ -n $ziptool ]]; then
 	img=$img.${ZIPEXTENSIONS[$ziptool]}
 fi
 
-aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
-logVariables $LINENO aftersize
+aftersize="$(get_file_size_bytes "$img")"
+savedsize=$((beforesize - aftersize))
+logVariables $LINENO aftersize savedsize
 
-info "Shrunk $img from $beforesize to $aftersize"
+info "Shrunk $img from $(human_bytes "$beforesize") to $(human_bytes "$aftersize") (saved $(human_bytes "$savedsize"))"
