@@ -28,10 +28,10 @@ If you specify the `newimagefile.img` parameter, the script will make a copy of 
 * `-r` will attempt to repair the filesystem using additional options if the normal repair fails
 * `-z` will compress the image after shrinking using gzip. `.gz` extension will be added to the filename.
 * `-Z` will compress the image after shrinking using xz. `.xz` extension will be added to the filename.
-* `-a` will use option -f9 for pigz and option -T0 for xz and compress in parallel.
+* `-a` will use option `-f9` for pigz and option `-T0 -9e` for xz and compress in parallel.
 * `-d` will create a logfile `pishrink.log` which may help for problem analysis.
 
-Default options for compressors can be overwritten by defining PISHRINK_GZIP or PSHRINK_XZ environment variables for gzip and xz.
+Default options for compressors can be overwritten by defining `PISHRINK_GZIP` or `PISHRINK_XZ` environment variables for gzip and xz.
 
 ## Prerequisites ##
 

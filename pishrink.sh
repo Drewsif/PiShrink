@@ -13,7 +13,7 @@ LOGFILE="${CURRENT_DIR}/${SCRIPTNAME%.*}.log"
 REQUIRED_TOOLS="parted losetup tune2fs md5sum e2fsck resize2fs"
 ZIPTOOLS=("gzip xz")
 declare -A ZIP_PARALLEL_TOOL=( [gzip]="pigz" [xz]="xz" ) # parallel zip tool to use in parallel mode
-declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f9" [xz]="-T0" ) # options for zip tools in parallel mode
+declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f9" [xz]="-T0 -9e" ) # options for zip tools in parallel mode
 declare -A ZIPEXTENSIONS=( [gzip]="gz" [xz]="xz" ) # extensions of zipped files
 
 function info() {
