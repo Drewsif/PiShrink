@@ -2,20 +2,22 @@
 # PiShrink #
 
 PiShrink is a bash script that automatically shrink a pi image that will then resize to the max size of the SD card on boot. This will make putting the image back onto the SD card faster and the shrunk images will compress better.
-In addition the shrunk image can be compressed with gzip and xz to create an even smaller image. Parallel compression of the image
+In addition the shrunk image can be compressed with gzip, xz, and zstd to create an even smaller image. Parallel compression of the image
 using multiple cores is supported.
 
 ## Usage ##
 
 ```text
-Usage: pishrink.sh [-adhnrsvzZ] imagefile.img [newimagefile.img]
+Usage: pishrink.sh [-aJdhnrsuvzZ] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
   -v         Be verbose
   -n         Disable automatic update checking
   -r         Use advanced filesystem repair option if the normal one fails
+  -u         Do not compress output image
+  -J         Compress image after shrinking with zstd (fast mode)
   -z         Compress image after shrinking with gzip
-  -Z         Compress image after shrinking with xz
+  -Z         Compress image after shrinking with xz (default: smallest mode, all cores)
   -a         Compress image in parallel using multiple cores
   -d         Write debug messages in a debug log file
 ```
@@ -26,12 +28,14 @@ If you specify the `newimagefile.img` parameter, the script will make a copy of 
 * `-v` enables more verbose output
 * `-n` disables the script from checking Github for a new PiShrink release
 * `-r` will attempt to repair the filesystem using additional options if the normal repair fails
+* `-u` disables compression and keeps an uncompressed `.img` output only.
+* `-J` will compress the image after shrinking using zstd (fast mode). `.zst` extension will be added to the filename.
 * `-z` will compress the image after shrinking using gzip. `.gz` extension will be added to the filename.
-* `-Z` will compress the image after shrinking using xz. `.xz` extension will be added to the filename.
-* `-a` will use option `-f9` for pigz and option `-T0 -9e` for xz and compress in parallel.
+* `-Z` will compress the image after shrinking using xz (default smallest mode). `.xz` extension will be added to the filename.
+* `-a` will compress in parallel using all cores.
 * `-d` will create a logfile `pishrink.log` which may help for problem analysis.
 
-Default options for compressors can be overwritten by defining `PISHRINK_GZIP` or `PISHRINK_XZ` environment variables for gzip and xz.
+Default options for compressors can be overwritten by defining `PISHRINK_GZIP`, `PISHRINK_XZ`, or `PISHRINK_ZSTD` environment variables.
 
 ## Prerequisites ##
 
@@ -50,7 +54,7 @@ If you want to use auto resizing on a distro using Systemd, you should ensure yo
 
 ### Linux Instructions ###
 
-If you are on Debian/Ubuntu you can install all the packages you would need by running: `sudo apt update && sudo apt install -y wget parted gzip pigz xz-utils udev e2fsprogs`
+If you are on Debian/Ubuntu you can install all the packages you would need by running: `sudo apt update && sudo apt install -y wget parted gzip pigz xz-utils zstd pv udev e2fsprogs`
 
 Run the block below to install PiShrink onto your system.
 
@@ -66,7 +70,7 @@ PiShrink can be ran on Windows using [Windows Subsystem for Linux](https://learn
 
 1. In an Administrator command prompt run `wsl --install -d Debian`. You will likely need to reboot after. Please check [Microsoft's documentation](https://learn.microsoft.com/en-us/windows/wsl/install) if you run into issues.
 2. Open the `Debian` app from your start menu.
-3. Run `sudo apt update && sudo apt install -y wget parted gzip pigz xz-utils udev e2fsprogs`
+3. Run `sudo apt update && sudo apt install -y wget parted gzip pigz xz-utils zstd pv udev e2fsprogs`
 4. Go to the Linux Instructions section above, do that and you're good to go! Your C:\ drive is mounted at /mnt/c/
 
 ### MacOS Instructions ###
