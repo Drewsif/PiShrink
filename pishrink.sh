@@ -454,5 +454,5 @@ aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
 logVariables $LINENO aftersize
 
 finish=$SECONDS
-diff="$(($finish-$start))"
-info "Shrunk $img from $beforesize to $aftersize in $diff seconds"
+diff=$((finish - start))
+info "Shrunk $img from $beforesize to $aftersize in $((diff / 60))m $((diff % 60))s"
