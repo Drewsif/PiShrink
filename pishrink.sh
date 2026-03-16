@@ -5,6 +5,7 @@
 # Link: https://github.com/Drewsif/PiShrink
 
 version="v24.10.23"
+startSeconds=$SECONDS
 
 CURRENT_DIR="$(pwd)"
 SCRIPTNAME="${0##*/}"
@@ -452,4 +453,6 @@ fi
 aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
 logVariables $LINENO aftersize
 
-info "Shrunk $img from $beforesize to $aftersize"
+finishSeconds=$SECONDS
+elapsedSeconds=$((finishSeconds - startSeconds))
+info "Shrunk $img from $beforesize to $aftersize in $((elapsedSeconds / 60))m $((elapsedSeconds % 60))s"
