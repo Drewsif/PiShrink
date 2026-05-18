@@ -12,10 +12,10 @@ SCRIPTNAME="${0##*/}"
 MYNAME="${SCRIPTNAME%.*}"
 LOGFILE="${CURRENT_DIR}/${SCRIPTNAME%.*}.log"
 REQUIRED_TOOLS="parted losetup tune2fs md5sum e2fsck resize2fs"
-ZIPTOOLS=("gzip xz")
+ZIPTOOLS=("gzip xz zip")
 declare -A ZIP_PARALLEL_TOOL=( [gzip]="pigz" [xz]="xz" ) # parallel zip tool to use in parallel mode
 declare -A ZIP_PARALLEL_OPTIONS=( [gzip]="-f9" [xz]="-T0" ) # options for zip tools in parallel mode
-declare -A ZIPEXTENSIONS=( [gzip]="gz" [xz]="xz" ) # extensions of zipped files
+declare -A ZIPEXTENSIONS=( [gzip]="gz" [xz]="xz" [zip]="zip" ) # extensions of zipped files
 
 function info() {
 	echo "$SCRIPTNAME: $1"
@@ -170,7 +170,7 @@ EOFRC
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-adhnrsvzZ] imagefile.img [newimagefile.img]
+Usage: $0 [-adhnrsvzZ] [--zip] imagefile.img [newimagefile.img]
 
   -s         Don't expand filesystem when image is booted the first time
   -v         Be verbose
@@ -193,7 +193,7 @@ parallel=false
 verbose=false
 ziptool=""
 
-while getopts ":adnhrsvzZ" opt; do
+while getopts ":adnhrsvzZ-:" opt; do
   case "${opt}" in
     a) parallel=true;;
     d) debug=true;;
@@ -204,6 +204,11 @@ while getopts ":adnhrsvzZ" opt; do
     v) verbose=true;;
     z) ziptool="gzip";;
     Z) ziptool="xz";;
+    -) # 2. Handle long options manually
+      case "${OPTARG}" in
+        zip) ziptool="zip" ;; # Catches --zip
+        *) help ;;
+      esac ;;
     *) help;;
   esac
 done
@@ -441,6 +446,14 @@ if [[ -n $ziptool ]]; then
 			rc=$?
 			error $LINENO "$parallel_tool failed with rc $rc"
 			exit 18
+		fi
+
+	elif [[ "$ziptool" == "zip" ]] ; then
+		info "Using $ziptool on the shrunk image"
+		if ! $ziptool ${options} "${img%.img}.zip" "$img"; then
+			rc=$?
+			error $LINENO "$ziptool failed with rc $rc"
+			exit 19
 		fi
 
 	else # sequential
