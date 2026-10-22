@@ -93,7 +93,8 @@ function set_autoexpand() {
         info "An existing /etc/rc.local was not found, autoexpand may fail..."
     fi
 
-    if ! grep -q "## PiShrink https://github.com/Drewsif/PiShrink ##" "$mountdir/etc/rc.local"; then
+    if [[ ! -f "$mountdir/etc/rc.local" ]] ||
+       ! grep -q "## PiShrink https://github.com/Drewsif/PiShrink ##" "$mountdir/etc/rc.local"; then
       echo "Creating new /etc/rc.local"
     if [ -f "$mountdir/etc/rc.local" ]; then
         mv "$mountdir/etc/rc.local" "$mountdir/etc/rc.local.bak"
@@ -116,6 +117,7 @@ do_expand_rootfs() {
   [ "$PART_START" ] || return 1
   # Return value will likely be error for fdisk as it fails to reload the
   # partition table because the root fs is mounted
+  DISK_ID=$(sfdisk --disk-id /dev/mmcblk0) || return 1
   fdisk /dev/mmcblk0 <<EOF
 p
 d
@@ -128,6 +130,7 @@ $PART_START
 p
 w
 EOF
+sfdisk --disk-id /dev/mmcblk0 "$DISK_ID" || return 1
 
 cat <<EOF > /etc/rc.local &&
 #!/bin/sh
@@ -386,9 +389,17 @@ else
 
   #Shrink partition
   info "Shrinking partition"
+
+  # Preserve the MBR disk identifier
+  diskid=$(sfdisk --disk-id "$img") || {
+    error $LINENO "Unable to read disk ID"
+    exit 13
+  }
+
+  info "Original disk ID: $diskid"
   partnewsize=$(($minsize * $blocksize))
   newpartend=$(($partstart + $partnewsize))
-  logVariables $LINENO partnewsize newpartend
+  logVariables $LINENO partnewsize newpartend diskid
   parted -s -a minimal "$img" rm "$partnum"
   rc=$?
   if (( $rc )); then
@@ -402,6 +413,21 @@ else
     error $LINENO "parted failed with rc $rc"
     exit 14
   fi
+
+  # Restore the original MBR disk identifier
+  sfdisk --disk-id "$img" "$diskid" || {
+    error $LINENO "Unable to restore disk ID"
+    exit 15
+  }
+
+  # Verify the disk identifier
+  newdiskid=$(sfdisk --disk-id "$img") || exit 15
+  if [[ "$newdiskid" != "$diskid" ]]; then
+    error $LINENO "Disk ID mismatch: expected $diskid, got $newdiskid"
+    exit 15
+  fi
+
+  info "Disk ID preserved: $newdiskid"
 fi
 
 # Truncate the image file
