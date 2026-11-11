@@ -28,8 +28,20 @@ function error() {
 }
 
 function cleanup() {
+
+	local rc=$?
 	if losetup "$loopback" &>/dev/null; then
 		losetup -d "$loopback"
+	fi
+	# remove the temporary decompressed image if shrinking failed, the compressed source is left untouched
+	if (( rc != 0 )) && [[ -n $decompressed_img && -f $decompressed_img ]]; then
+		info "Removing temporary decompressed image $decompressed_img"
+		rm -f "$decompressed_img"
+	fi
+	# compressing the shrunk image failed, restore the original compressed image
+	if [[ -n $src_backup && -f $src_backup ]]; then
+		info "Restoring original image $src, the shrunk image is kept as $img"
+		mv -f "$src_backup" "$src"
 	fi
 	if [ "$debug" = true ]; then
 		local old_owner=$(stat -c %u:%g "$src")
@@ -48,6 +60,16 @@ function logVariables() {
 			echo "$var: $v" >> "$LOGFILE"
 		done
 	fi
+}
+
+# Print the compression tool (gzip or xz) used for a file based on its magic bytes, nothing if not compressed
+function detectCompression() {
+	local magic
+	magic="$(od -An -tx1 -N6 "$1" 2>/dev/null | tr -d ' \n')"
+	case "$magic" in
+		1f8b*) echo "gzip";;
+		fd377a585a00) echo "xz";;
+	esac
 }
 
 function checkFilesystem() {
@@ -170,7 +192,10 @@ EOFRC
 help() {
 	local help
 	read -r -d '' help << EOM
-Usage: $0 [-adhnrsvzZ] imagefile.img [newimagefile.img]
+Usage: $0 [-adhnrsvzZ] imagefile.img[.gz|.xz] [newimagefile.img[.gz|.xz]]
+
+  imagefile may be gzip or xz compressed. It is decompressed to a sparse, temporary .img and,
+  unless -z/-Z or a newimagefile extension says otherwise, recompressed with the same tool.
 
   -s         Don't expand filesystem when image is booted the first time
   -v         Be verbose
@@ -252,6 +277,25 @@ export LANGUAGE=POSIX
 export LC_ALL=POSIX
 export LANG=POSIX
 
+# detect a compressed source image
+srcziptool="$(detectCompression "$src")"
+if [[ -n $srcziptool ]]; then
+	info "Detected $srcziptool compressed image"
+	REQUIRED_TOOLS="$REQUIRED_TOOLS $srcziptool dd"
+fi
+
+# if no compression was requested, derive it from the new image name or keep the source compression when shrinking in place
+if [[ -z $ziptool ]]; then
+	if [[ -n "$2" ]]; then
+		case "${2##*.}" in
+			gz) ziptool="gzip";;
+			xz) ziptool="xz";;
+		esac
+	elif [[ -n $srcziptool ]]; then
+		ziptool="$srcziptool"
+	fi
+fi
+
 # check selected compression tool is supported and installed
 if [[ -n $ziptool ]]; then
 	if [[ ! " ${ZIPTOOLS[*]} " =~ $ziptool ]]; then
@@ -275,29 +319,70 @@ for command in $REQUIRED_TOOLS; do
   fi
 done
 
-#Copy to new file if requested
+#Determine the working image name
+f=""
 if [ -n "$2" ]; then
   f="$2"
   if [[ -n $ziptool && "${f##*.}" == "${ZIPEXTENSIONS[$ziptool]}" ]]; then	# remove zip extension if zip requested because zip tool will complain about extension
     f="${f%.*}"
   fi
+elif [[ -n $srcziptool ]]; then
+  # shrinking a compressed image in place: decompress next to it, e.g. image.img.xz -> image.img
+  if [[ "$src" == *."${ZIPEXTENSIONS[$srcziptool]}" ]]; then
+    f="${src%.*}"
+  else
+    f="$src.img"
+  fi
+  if [[ -e "$f" ]]; then
+    error $LINENO "$f already exists, refusing to overwrite it with the decompressed image. Remove it or specify newimagefile.img"
+    exit 20
+  fi
+fi
+
+# cleanup at script exit
+trap cleanup EXIT
+
+#Decompress or copy to new file if requested
+if [[ -n $srcziptool ]]; then
+  decompress_tool="$srcziptool"
+  decompress_options="-dc"
+  if [[ $srcziptool == "xz" ]]; then
+    decompress_options="-T0 -dc"	# multithreaded decompression for multi block archives, e.g. created with xz -T0
+  elif [[ $parallel == true ]] && command -v pigz >/dev/null 2>&1; then
+    decompress_tool="pigz"
+  fi
+  dd_status="none"
+  [[ $verbose == true ]] && dd_status="progress"
+  info "Decompressing $src to $f..."
+  decompressed_img="$f"
+  # write a sparse file so zeroed blocks of the image don't use disk space
+  $decompress_tool $decompress_options "$src" | dd of="$f" bs=4M iflag=fullblock conv=sparse status=$dd_status
+  rcs=("${PIPESTATUS[@]}")
+  if (( ${rcs[0]} != 0 || ${rcs[1]} != 0 )); then
+    error $LINENO "Could not decompress file, $decompress_tool rc ${rcs[0]}, dd rc ${rcs[1]}"
+    rm -f "$f"
+    exit 21
+  fi
+  [[ -n "$2" ]] && decompressed_img=""	# keep a user requested image even if shrinking fails
+  info "Decompressed image size: $(ls -lh "$f" | cut -d ' ' -f 5)"
+elif [ -n "$2" ]; then
   info "Copying $1 to $f..."
   cp --reflink=auto --sparse=always "$1" "$f"
   if (( $? != 0 )); then
     error $LINENO "Could not copy file..."
     exit 5
   fi
+fi
+if [ -n "$f" ]; then
   old_owner=$(stat -c %u:%g "$1")
   chown "$old_owner" "$f"
   img="$f"
 fi
 
-# cleanup at script exit
-trap cleanup EXIT
 
 #Gather info
 info "Gathering data"
-beforesize="$(ls -lh "$img" | cut -d ' ' -f 5)"
+beforesize="$(ls -lh "$src" | cut -d ' ' -f 5)"
 parted_output="$(parted -ms "$img" unit B print)"
 rc=$?
 if (( $rc )); then
@@ -433,6 +518,14 @@ if [[ -n $ziptool ]]; then
 	[[ $parallel == true ]] && options="${ZIP_PARALLEL_OPTIONS[$ziptool]}"
 	[[ -v $envVarname ]] && options="${!envVarname}" # if environment variable defined use these options
 	[[ $verbose == true ]] && options="$options -v" # add verbose flag if requested
+	# the image is shrunk now, keep it even if compression fails
+	decompressed_img=""
+	# shrinking a compressed image in place replaces the original compressed file,
+	# keep the original aside until the new one is completely written
+	if [[ -n $srcziptool && "$img.${ZIPEXTENSIONS[$ziptool]}" == "$src" ]]; then
+		src_backup="$src.pishrink-orig"
+		mv "$src" "$src_backup"
+	fi
 
 	if [[ $parallel == true ]]; then
 		parallel_tool="${ZIP_PARALLEL_TOOL[$ziptool]}"
@@ -452,6 +545,10 @@ if [[ -n $ziptool ]]; then
 		fi
 	fi
 	img=$img.${ZIPEXTENSIONS[$ziptool]}
+	if [[ -n $src_backup ]]; then
+		rm -f "$src_backup"
+		src_backup=""
+	fi
 fi
 
 aftersize=$(ls -lh "$img" | cut -d ' ' -f 5)
