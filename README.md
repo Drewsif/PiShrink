@@ -8,7 +8,7 @@ using multiple cores is supported.
 ## Usage ##
 
 ```text
-Usage: pishrink.sh [-adhnrsvzZ] imagefile.img [newimagefile.img]
+Usage: pishrink.sh [-adhnrsvzZ] imagefile.img[.gz|.xz] [newimagefile.img[.gz|.xz]]
 
   -s         Don't expand filesystem when image is booted the first time
   -v         Be verbose
@@ -30,6 +30,20 @@ If you specify the `newimagefile.img` parameter, the script will make a copy of 
 * `-Z` will compress the image after shrinking using xz. `.xz` extension will be added to the filename.
 * `-a` will use option -f9 for pigz and option -T0 for xz and compress in parallel.
 * `-d` will create a logfile `pishrink.log` which may help for problem analysis.
+
+### Compressed images ###
+
+`imagefile` can also be a gzip or xz compressed image (detected from the file contents), e.g. one created with
+`dd if=/dev/rdisk4 bs=4m | xz -T0 -3 > image.img.xz`. PiShrink decompresses it to a sparse `.img`, shrinks it and then:
+
+* without `newimagefile`, recompresses it with the same tool and replaces the original, e.g. `pishrink.sh image.img.xz` updates `image.img.xz`. The decompressed `image.img` must not already exist.
+* with `newimagefile`, compresses based on its extension: `pishrink.sh image.img.xz small.img.gz` writes gzip, `pishrink.sh image.img.xz small.img` writes an uncompressed image. The original stays unchanged.
+* `-z` / `-Z` always take precedence. For example, `pishrink.sh -Z -a image.img.gz` writes `image.img.xz` and keeps `image.img.gz`.
+
+You need enough free disk space for the decompressed image. Zeroed blocks are written sparsely, so this is roughly the space used inside the image, not the full disk size.
+If the disk fills up, or shrinking fails, the temporary decompressed image is deleted and the compressed original stays unchanged.
+When recompressing in place, the original is kept until the new compressed file is completely written. If compression fails, the original is restored and the shrunk `.img` is kept.
+Recompressing with xz is slow on one core, so use `-a` or set `PISHRINK_XZ="-T0 -3"`.
 
 Default options for compressors can be overwritten by defining PISHRINK_GZIP or PSHRINK_XZ environment variables for gzip and xz.
 
