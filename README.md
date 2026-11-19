@@ -69,6 +69,30 @@ PiShrink can be ran on Windows using [Windows Subsystem for Linux](https://learn
 3. Run `sudo apt update && sudo apt install -y wget parted gzip pigz xz-utils udev e2fsprogs`
 4. Go to the Linux Instructions section above, do that and you're good to go! Your C:\ drive is mounted at /mnt/c/
 
+#### Docker on Windows ####
+
+```console
+$ git clone https://github.com/Drewsif/PiShrink pishrink
+
+$ cd pishrink
+
+$ docker build -t pishrink .
+
+$ docker run --rm pishrink --help
+Usage: /usr/local/bin/pishrink [-adhnrsvzZ] imagefile.img [newimagefile.img]
+
+  -s         Don't expand filesystem when image is booted the first time
+  -v         Be verbose
+  -n         Disable automatic update checking
+  -r         Use advanced filesystem repair option if the normal one fails
+  -z         Compress image after shrinking with gzip
+  -Z         Compress image after shrinking with xz
+  -a         Compress image in parallel using multiple cores
+  -d         Write debug messages in a debug log file
+
+$ docker run --rm --privileged -v ".:/workdir" pishrink -s -Z -a -v imagefile.img
+```
+
 ### MacOS Instructions ###
 
 > [!NOTE]
@@ -76,19 +100,26 @@ PiShrink can be ran on Windows using [Windows Subsystem for Linux](https://learn
 
 1. [Installer Docker](https://docs.docker.com/docker-for-mac/install/).
 2. Clone this repo and cd into the pishrink directory:
+
    ```bash
    git clone https://github.com/Drewsif/PiShrink && cd PiShrink
    ```
+
 3. Build the container by running:
+
    ```bash
    docker build -t pishrink .
    ```
+
 4. Create an alias to run PiShrink:
+
    ```bash
    # for Intel Silicon with bash
    echo "alias pishrink='docker run -it --rm --platform linux/amd64 --privileged=true -v \$(pwd):/workdir pishrink'" >> ~/.bashrc && source ~/.bashrc
    ```
+
    or
+
    ```bash
    # for Apple Silicon with zsh
    echo "alias pishrink='docker run -it --rm --platform linux/arm64 --privileged=true -v \$(pwd):/workdir pishrink'" >> ~/.zshrc && source ~/.zshrc
